@@ -1,10 +1,16 @@
+import CoreLocation
+import MapKit
 import SwiftUI
 
 struct MuseumDetailView: View {
     let space: MuseumSpace
     @Environment(MuseumStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var enterAR = false
+    @State private var showingMapList = false
+    @State private var locationService = MuseumLocationService()
+    @State private var actionPrompt: PlaceActionPrompt?
     @State private var readerExhibit: Exhibit?
 
     var body: some View {
@@ -17,6 +23,24 @@ struct MuseumDetailView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .overlay(alignment: .topLeading) { backButton }
+        .task { locationService.start() }
+        .sheet(item: $actionPrompt) { prompt in
+            DirectionsPromptView(
+                space: space,
+                prompt: prompt,
+                requestLocation: requestLocation,
+                openSettings: openSettings,
+                openWalkingDirections: openWalkingDirections,
+                viewOnMap: viewOnMap,
+                tryARAnyway: tryARAnyway
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(.ultraThinMaterial)
+        }
+        .fullScreenCover(isPresented: $showingMapList) {
+            MapListView()
+        }
         .fullScreenCover(isPresented: $enterAR) { ARMuseumView(space: space) }
         .sheet(item: $readerExhibit) { ExhibitDetailView(space: space, exhibit: $0).presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(.ultraThinMaterial) }
     }
@@ -94,7 +118,7 @@ struct MuseumDetailView: View {
 
     private var actions: some View {
         VStack(spacing: 10) {
-            Button { enterAR = true } label: {
+            Button { decideARFlow() } label: {
                 Label("Open AR / Directions", systemImage: "sparkles")
             }
             .buttonStyle(.museum(.primary, size: .large))
@@ -104,6 +128,82 @@ struct MuseumDetailView: View {
             }
             .buttonStyle(.museum(.secondary, size: .regular))
         }
+    }
+
+    private var currentProximity: UserProximity {
+        let userCoordinate = locationService.currentLocation?.coordinate
+        let targetCoordinate = CLLocationCoordinate2D(latitude: space.latitude, longitude: space.longitude)
+        return GeoMath.classify(user: userCoordinate, target: targetCoordinate, radiusMeters: space.radiusMeters)
+    }
+
+    private func decideARFlow() {
+        switch locationService.authorizationState {
+        case .unknown:
+            requestLocation()
+            actionPrompt = .locationNeeded
+
+        case .denied:
+            actionPrompt = .locationDenied(distanceText: proximityText, bearingText: bearingText)
+
+        case .authorized:
+            switch currentProximity {
+            case .unknown:
+                actionPrompt = .locationNeeded
+            case .tooFar(let distanceMeters, let bearingDegrees):
+                actionPrompt = .tooFar(distanceMeters: distanceMeters, bearingDegrees: bearingDegrees)
+            case .nearby, .inside:
+                enterAR = true
+            }
+        }
+    }
+
+    private var proximityText: String? {
+        switch currentProximity {
+        case .tooFar(let distanceMeters, _), .nearby(let distanceMeters, _), .inside(let distanceMeters):
+            return GeoMath.formatDistance(distanceMeters)
+        case .unknown:
+            return nil
+        }
+    }
+
+    private var bearingText: String? {
+        switch currentProximity {
+        case .tooFar(_, let bearingDegrees), .nearby(_, let bearingDegrees):
+            return "\(GeoMath.compassDirection(for: bearingDegrees)) • \(Int(bearingDegrees))°"
+        case .inside, .unknown:
+            return nil
+        }
+    }
+
+    private func requestLocation() {
+        locationService.requestWhenInUseAuthorization()
+    }
+
+    private func openWalkingDirections() {
+        let placemark = MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: space.latitude, longitude: space.longitude))
+        let item = MKMapItem(placemark: placemark)
+        item.name = space.name
+        dismissPromptIfNeeded()
+        item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking])
+    }
+
+    private func viewOnMap() {
+        dismissPromptIfNeeded()
+        showingMapList = true
+    }
+
+    private func tryARAnyway() {
+        dismissPromptIfNeeded()
+        enterAR = true
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: "app-settings:") else { return }
+        openURL(url)
+    }
+
+    private func dismissPromptIfNeeded() {
+        actionPrompt = nil
     }
 
     private var exhibits: some View {
@@ -156,5 +256,167 @@ struct MuseumDetailView: View {
         .padding(16)
         .background(LinearGradient(colors: [Museum.blue.opacity(0.25), Museum.purple.opacity(0.20)], startPoint: .leading, endPoint: .trailing), in: RoundedRectangle(cornerRadius: Museum.Radius.lg, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Museum.Radius.lg).stroke(Museum.blue.opacity(0.22), lineWidth: 1))
+    }
+}
+
+private enum PlaceActionPrompt: Equatable, Identifiable {
+    case locationNeeded
+    case locationDenied(distanceText: String?, bearingText: String?)
+    case tooFar(distanceMeters: Double, bearingDegrees: Double)
+
+    var id: String {
+        switch self {
+        case .locationNeeded: return "locationNeeded"
+        case .locationDenied(let distanceText, let bearingText): return "locationDenied-\(distanceText ?? "none")-\(bearingText ?? "none")"
+        case .tooFar(let distanceMeters, let bearingDegrees): return "tooFar-\(Int(distanceMeters))-\(Int(bearingDegrees))"
+        }
+    }
+}
+
+private struct DirectionsPromptView: View {
+    let space: MuseumSpace
+    let prompt: PlaceActionPrompt
+    let requestLocation: () -> Void
+    let openSettings: () -> Void
+    let openWalkingDirections: () -> Void
+    let viewOnMap: () -> Void
+    let tryARAnyway: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(Museum.title(24))
+                    .foregroundStyle(Museum.text)
+                Text(message)
+                    .font(Museum.bodyFont(14))
+                    .foregroundStyle(Museum.muted)
+            }
+
+            compactSiteCard
+
+            if let detailText {
+                HStack(spacing: 8) {
+                    Image(systemName: "location.north.line")
+                        .foregroundStyle(Museum.blue)
+                    Text(detailText)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Museum.text)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .museumGlassCard(radius: Museum.Radius.md)
+            }
+
+            VStack(spacing: 10) {
+                switch prompt {
+                case .locationNeeded:
+                    Button(action: requestLocation) {
+                        Label("Allow location", systemImage: "location.fill")
+                    }
+                    .buttonStyle(.museum(.primary, size: .large))
+
+                    Button(action: tryARAnyway) {
+                        Label("Try AR Anyway", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.museum(.secondary, size: .regular))
+
+                case .locationDenied:
+                    Button(action: openSettings) {
+                        Label("Open Settings", systemImage: "gearshape")
+                    }
+                    .buttonStyle(.museum(.primary, size: .large))
+
+                    Button(action: openWalkingDirections) {
+                        Label("Walking Directions", systemImage: "map")
+                    }
+                    .buttonStyle(.museum(.secondary, size: .regular))
+
+                    Button(action: tryARAnyway) {
+                        Label("Try AR Anyway", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.museum(.secondary, size: .regular))
+
+                case .tooFar:
+                    Button(action: openWalkingDirections) {
+                        Label("Open Walking Directions", systemImage: "map")
+                    }
+                    .buttonStyle(.museum(.primary, size: .large))
+
+                    Button(action: viewOnMap) {
+                        Label("View on Map", systemImage: "map.fill")
+                    }
+                    .buttonStyle(.museum(.secondary, size: .regular))
+
+                    Button(action: tryARAnyway) {
+                        Label("Try AR Anyway", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.museum(.secondary, size: .regular))
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+    }
+
+    private var title: String {
+        switch prompt {
+        case .locationNeeded:
+            return "Location needed"
+        case .locationDenied:
+            return "Location denied"
+        case .tooFar:
+            return "Too far for AR"
+        }
+    }
+
+    private var message: String {
+        switch prompt {
+        case .locationNeeded:
+            return "This space needs your current location so we can decide whether to open AR or directions."
+        case .locationDenied:
+            return "Turn on location access to get guidance, walking directions, and AR when you're close enough."
+        case .tooFar(let distanceMeters, let bearingDegrees):
+            return "You're \(GeoMath.formatDistance(distanceMeters)) away. Walk toward \(GeoMath.compassDirection(for: bearingDegrees)) or open the map first."
+        }
+    }
+
+    private var detailText: String? {
+        switch prompt {
+        case .locationNeeded:
+            return nil
+        case .locationDenied(let distanceText, let bearingText):
+            if let distanceText, let bearingText {
+                return "\(distanceText) away • heading \(bearingText)"
+            }
+            return distanceText
+        case .tooFar(let distanceMeters, let bearingDegrees):
+            return "\(GeoMath.formatDistance(distanceMeters)) away • heading \(Int(bearingDegrees))°"
+        }
+    }
+
+    private var compactSiteCard: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Museum.accentGradient)
+                .frame(width: 54, height: 54)
+                .overlay(Image(systemName: space.kind.symbol).foregroundStyle(.white))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Overline(text: space.kind.label, color: space.accent)
+                Text(space.name)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Museum.text)
+                Text(space.tagline)
+                    .font(Museum.bodyFont(12))
+                    .foregroundStyle(Museum.muted)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+        }
+        .padding(14)
+        .museumGlassCard(radius: Museum.Radius.md)
     }
 }
