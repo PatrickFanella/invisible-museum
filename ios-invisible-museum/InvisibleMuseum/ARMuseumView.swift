@@ -78,24 +78,30 @@ struct ARMuseumView: View {
     private var background: some View {
         let mode = currentMode(for: currentProximity)
 
-        return LinearGradient(colors: [Color(red: 0.11, green: 0.14, blue: 0.17), Museum.background], startPoint: .topLeading, endPoint: .bottomTrailing)
-            .ignoresSafeArea()
-            .overlay {
-                switch mode {
-                case .geoAR, .worldTrackingFallback:
-                    EmptyView()
-                case .guidanceOnly, .unsupported:
-                    ZStack {
-                        ForEach(0..<8) { i in
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.white.opacity(0.035))
-                                .frame(width: CGFloat(120 + i * 18), height: 10)
-                                .rotationEffect(.degrees(Double(i * 17)))
-                                .offset(x: CGFloat(i * 17 - 70), y: CGFloat(i * 28 - 80))
+        return Group {
+            switch mode {
+            case .geoAR, .worldTrackingFallback:
+                LinearGradient(colors: [Color(red: 0.11, green: 0.14, blue: 0.17), Museum.background], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .overlay {
+                        ZStack {
+                            ForEach(0..<8) { i in
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.white.opacity(0.035))
+                                    .frame(width: CGFloat(120 + i * 18), height: 10)
+                                    .rotationEffect(.degrees(Double(i * 17)))
+                                    .offset(x: CGFloat(i * 17 - 70), y: CGFloat(i * 28 - 80))
+                            }
                         }
                     }
-                }
+            case .guidanceOnly, .unsupported:
+                GuidanceMapBackground(
+                    space: space,
+                    userCoordinate: locationService.currentLocation?.coordinate,
+                    authorizationState: locationService.authorizationState
+                )
             }
+        }
+        .ignoresSafeArea()
     }
 
     private var currentProximity: UserProximity {
@@ -212,6 +218,50 @@ struct ARMuseumView: View {
     private func openSettings() {
         guard let url = URL(string: "app-settings:") else { return }
         openURL(url)
+    }
+}
+
+private struct GuidanceMapBackground: View {
+    let space: MuseumSpace
+    let userCoordinate: CLLocationCoordinate2D?
+    let authorizationState: MuseumLocationService.AuthorizationState
+
+    @State private var cameraPosition: MapCameraPosition = .automatic
+
+    var body: some View {
+        Map(position: $cameraPosition, interactionModes: [.all]) {
+            Marker(space.name, systemImage: space.kind.symbol, coordinate: destinationCoordinate)
+                .tint(space.accent)
+
+            UserAnnotation()
+        }
+        .mapStyle(.standard(elevation: .flat))
+        .overlay {
+            LinearGradient(
+                colors: [Color.black.opacity(0.12), Color.black.opacity(0.36), Color.black.opacity(0.60)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .allowsHitTesting(false)
+        }
+        .onAppear(perform: updateCamera)
+        .onChange(of: userCoordinate?.latitude ?? 0) { _, _ in updateCamera() }
+        .onChange(of: userCoordinate?.longitude ?? 0) { _, _ in updateCamera() }
+        .onChange(of: authorizationState) { _, _ in updateCamera() }
+    }
+
+    private var destinationCoordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: space.latitude, longitude: space.longitude)
+    }
+
+    private func updateCamera() {
+        let span = max(0.008, min(0.08, space.radiusMeters / 2500.0))
+        cameraPosition = .region(
+            MKCoordinateRegion(
+                center: destinationCoordinate,
+                span: MKCoordinateSpan(latitudeDelta: span, longitudeDelta: span)
+            )
+        )
     }
 }
 
