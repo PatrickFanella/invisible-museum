@@ -16,10 +16,13 @@ import Observation
 @Observable
 final class MuseumStore {
     private let repository: any MuseumRepository
+    private let persistence: MuseumLocalPersistence
     private(set) var spaces: [MuseumSpace]
     private(set) var nearbySpacesState: NearbySpacesState = .loading
     var savedExhibitIDs: Set<String> = []
     var downloadedSpaceIDs: Set<String>
+    private var downloadedSpaceOverrides: [String: Bool] = [:]
+    private(set) var contributionCount: Int = 0
 
 
     enum NearbySpacesState: Equatable {
@@ -29,10 +32,27 @@ final class MuseumStore {
     }
 
 
-    init(repository: any MuseumRepository = BackendMuseumRepository()) {
+    init(repository: any MuseumRepository = BackendMuseumRepository(), persistence: MuseumLocalPersistence = .init()) {
         self.repository = repository
+        self.persistence = persistence
         spaces = SampleData.spaces
-        downloadedSpaceIDs = Set(SampleData.spaces.filter(\.isDownloaded).map(\.id))
+        let savedIDs = persistence.loadSavedExhibitIDs()
+        let overrides = persistence.loadDownloadedSpaceOverrides()
+        let contributionTotal = persistence.loadContributionCount()
+
+        let sampleDownloadedIDs = Set(SampleData.spaces.filter(\.isDownloaded).map(\.id))
+        let resolvedDownloadedIDs: Set<String>
+        if let persistedDownloadedIDs = persistence.loadDownloadedSpaceIDs() {
+            resolvedDownloadedIDs = persistedDownloadedIDs
+        } else {
+            resolvedDownloadedIDs = Self.resolveDownloadedIDs(defaultIDs: sampleDownloadedIDs, overrides: overrides)
+            persistence.saveDownloadedSpaceIDs(resolvedDownloadedIDs)
+        }
+
+        savedExhibitIDs = savedIDs
+        downloadedSpaceOverrides = overrides
+        contributionCount = contributionTotal
+        downloadedSpaceIDs = resolvedDownloadedIDs
     }
 
 
@@ -52,6 +72,8 @@ final class MuseumStore {
         } else {
             savedExhibitIDs.insert(exhibit.id)
         }
+
+        persistence.saveSavedExhibitIDs(savedExhibitIDs)
     }
 
 
@@ -63,9 +85,14 @@ final class MuseumStore {
     func toggleDownloaded(_ space: MuseumSpace) {
         if downloadedSpaceIDs.contains(space.id) {
             downloadedSpaceIDs.remove(space.id)
+            downloadedSpaceOverrides[space.id] = false
         } else {
             downloadedSpaceIDs.insert(space.id)
+            downloadedSpaceOverrides[space.id] = true
         }
+
+        persistence.saveDownloadedSpaceIDs(downloadedSpaceIDs)
+        persistence.saveDownloadedSpaceOverrides(downloadedSpaceOverrides)
     }
 
 
@@ -75,23 +102,35 @@ final class MuseumStore {
         do {
             let fetchedSpaces = try await repository.fetchNearbySpaces(latitude: 41.794, longitude: -88.007, radiusMeters: 5000)
             spaces = fetchedSpaces
-            downloadedSpaceIDs = Set(fetchedSpaces.filter(\.isDownloaded).map(\.id))
+            downloadedSpaceIDs = Self.resolveDownloadedIDs(
+                defaultIDs: Set(fetchedSpaces.filter(\.isDownloaded).map(\.id)),
+                overrides: downloadedSpaceOverrides
+            )
+            persistence.saveDownloadedSpaceIDs(downloadedSpaceIDs)
             nearbySpacesState = .loadedFromBackend
         } catch {
             spaces = SampleData.spaces
-            downloadedSpaceIDs = Set(SampleData.spaces.filter(\.isDownloaded).map(\.id))
+            downloadedSpaceIDs = Self.resolveDownloadedIDs(
+                defaultIDs: Set(SampleData.spaces.filter(\.isDownloaded).map(\.id)),
+                overrides: downloadedSpaceOverrides
+            )
+            persistence.saveDownloadedSpaceIDs(downloadedSpaceIDs)
             nearbySpacesState = .sampleFallback(reason: fallbackReason(for: error))
         }
     }
 
     func submitContribution(spaceID: String, suggestedTitle: String, kind: ExhibitKind, body: String, contributorName: String) async throws -> ContributionSubmissionDTO {
-        try await repository.submitContribution(
+        let submission = try await repository.submitContribution(
             spaceID: spaceID,
             suggestedTitle: suggestedTitle,
             kind: kind,
             body: body,
             contributorName: contributorName
         )
+
+        contributionCount += 1
+        persistence.saveContributionCount(contributionCount)
+        return submission
     }
 
 
@@ -101,6 +140,21 @@ final class MuseumStore {
                 .filter { savedExhibitIDs.contains($0.id) }
                 .map { (space, $0) }
         }
+    }
+
+
+    private static func resolveDownloadedIDs(defaultIDs: Set<String>, overrides: [String: Bool]) -> Set<String> {
+        var resolved = defaultIDs
+
+        for (id, isDownloaded) in overrides {
+            if isDownloaded {
+                resolved.insert(id)
+            } else {
+                resolved.remove(id)
+            }
+        }
+
+        return resolved
     }
 
 

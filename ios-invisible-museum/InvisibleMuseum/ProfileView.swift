@@ -279,7 +279,7 @@ struct ProfileView: View {
         return String(initials)
     }
 
-    private var contributionsValue: String { "TBD" }
+    private var contributionsValue: String { "\(store.contributionCount)" }
 
     private var cacheSummary: String { "\(store.downloadedSpaceIDs.count) cached" }
 
