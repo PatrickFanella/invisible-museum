@@ -17,6 +17,7 @@ POSTGRES_USER=museum
 POSTGRES_PASSWORD=change-me
 DATABASE_URL=postgres://museum:change-me@postgres:5432/invisible_museum?sslmode=disable
 API_PUBLISHED_ADDR=8080
+ADMIN_BEARER_TOKEN=change-me
 ```
 
 Do not publish the Postgres port. The deployment compose file does not expose it.
@@ -49,7 +50,7 @@ make nuc-down
 `make nuc-smoke` checks:
 
 - `GET /healthz`
-- `GET /api/v1/admin/contributions?status=pending`
+- `GET /api/v1/admin/contributions?status=pending` with `Authorization: Bearer $ADMIN_BEARER_TOKEN`
 
 ## Rollback
 
@@ -65,7 +66,7 @@ If the schema needs a full reset, stop the stack, back up data, then run Goose d
 
 ```bash
 curl http://localhost:8080/healthz
-curl http://localhost:8080/api/v1/admin/contributions?status=pending
+curl -H "Authorization: Bearer $ADMIN_BEARER_TOKEN" http://localhost:8080/api/v1/admin/contributions?status=pending
 ```
 
 From Almaz, verify the upstream before editing the public route:
@@ -75,3 +76,4 @@ curl http://nuc.lan:8080/healthz
 ```
 
 When going through Caddy/Cloudflare, use the public hostname instead of localhost.
+Keep admin access behind HTTPS outside the LAN, and rotate the bearer token by updating the env var and restarting the backend.

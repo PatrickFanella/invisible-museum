@@ -33,7 +33,7 @@ func main() {
 
 	repo := repository.New(pool)
 	handlers := httpapi.NewHandlers(repo)
-	router := httpapi.NewRouter(handlers)
+	router := httpapi.NewRouter(handlers, cfg.AdminBearerToken)
 
 	server := &http.Server{
 		Addr:              cfg.APIAddr,

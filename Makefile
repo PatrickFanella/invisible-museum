@@ -96,6 +96,7 @@ api-nearby:
 
 NUC_COMPOSE := -f backend/docker-compose.nuc.yml
 NUC_API_URL ?= http://localhost:8080
+ADMIN_BEARER_TOKEN ?= dev-admin-token
 
 nuc-up:
 	docker compose $(NUC_COMPOSE) up --build -d
@@ -107,7 +108,7 @@ nuc-logs:
 	docker compose $(NUC_COMPOSE) logs -f
 
 nuc-smoke:
-	curl "$(NUC_API_URL)/healthz" && curl "$(NUC_API_URL)/api/v1/admin/contributions?status=pending"
+	curl "$(NUC_API_URL)/healthz" && curl -H "Authorization: Bearer $(ADMIN_BEARER_TOKEN)" "$(NUC_API_URL)/api/v1/admin/contributions?status=pending"
 
 nuc-rollback:
 	docker compose $(NUC_COMPOSE) run --rm migrate goose -dir /migrations down

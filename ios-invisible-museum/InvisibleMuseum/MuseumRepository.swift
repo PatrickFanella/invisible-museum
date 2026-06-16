@@ -1,6 +1,7 @@
 import Foundation
 
 protocol MuseumRepository {
+    var requiresAdminBearerToken: Bool { get }
     func fetchNearbySpaces(latitude: Double, longitude: Double, radiusMeters: Double) async throws -> [MuseumSpace]
     func submitContribution(spaceID: String, suggestedTitle: String, kind: ExhibitKind, body: String, contributorName: String) async throws -> ContributionSubmissionDTO
     func fetchModerationQueue() async throws -> [ContributionModerationItem]
@@ -9,6 +10,7 @@ protocol MuseumRepository {
 
 struct BackendMuseumRepository: MuseumRepository {
     var client: MuseumAPIClient = MuseumAPIClient()
+    var requiresAdminBearerToken: Bool { true }
 
     func fetchNearbySpaces(latitude: Double, longitude: Double, radiusMeters: Double) async throws -> [MuseumSpace] {
         let spaces = try await client.fetchNearbySpaces(latitude: latitude, longitude: longitude, radiusMeters: radiusMeters)
@@ -37,6 +39,8 @@ struct BackendMuseumRepository: MuseumRepository {
 }
 
 struct SampleMuseumRepository: MuseumRepository {
+    var requiresAdminBearerToken: Bool { false }
+
     func fetchNearbySpaces(latitude: Double, longitude: Double, radiusMeters: Double) async throws -> [MuseumSpace] {
         SampleData.spaces
     }

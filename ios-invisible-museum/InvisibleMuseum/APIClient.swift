@@ -4,6 +4,7 @@ enum BackendConfiguration {
     static let apiBaseURLDefaultsKey = "InvisibleMuseum.apiBaseURL"
     static let apiBaseURLEnvironmentKey = "InvisibleMuseum.apiBaseURL"
     static let apiBaseURLInfoPlistKey = "InvisibleMuseum.apiBaseURL"
+    static let adminBearerTokenDefaultsKey = "InvisibleMuseum.adminBearerToken"
     static let defaultBaseURL = URL(string: "http://localhost:8080")!
 
     static var baseURL: URL { resolvedConfiguration().url }
@@ -14,6 +15,11 @@ enum BackendConfiguration {
 
     static var sourceDescription: String {
         resolvedConfiguration().source
+    }
+
+    static var adminBearerToken: String? {
+        let token = UserDefaults.standard.string(forKey: adminBearerTokenDefaultsKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return token.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     private static func resolvedConfiguration() -> (url: URL, source: String) {
@@ -44,6 +50,8 @@ struct MuseumAPIClient {
         case unexpectedStatusCode(Int)
         case backendUnavailable
         case validationFailed
+        case adminAuthNotConfigured
+        case adminUnauthorized
     }
 
     var baseURL: URL = BackendConfiguration.baseURL
@@ -108,23 +116,39 @@ struct MuseumAPIClient {
     }
 
     func fetchModerationQueue(status: ContributionModerationStatus = .pending) async throws -> [ContributionModerationItemDTO] {
+        guard let token = BackendConfiguration.adminBearerToken else { throw APIError.adminAuthNotConfigured }
         var components = URLComponents(url: baseURL.appendingPathComponent("api/v1/admin/contributions"), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "status", value: status.rawValue)]
 
         guard let url = components?.url else { throw APIError.invalidResponse }
 
-        let (data, response) = try await session.data(from: url)
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-        guard (200...299).contains(httpResponse.statusCode) else { throw APIError.unexpectedStatusCode(httpResponse.statusCode) }
+
+        switch httpResponse.statusCode {
+        case 200...299:
+            break
+        case 401:
+            throw APIError.adminUnauthorized
+        case 503:
+            throw APIError.adminAuthNotConfigured
+        default:
+            throw APIError.unexpectedStatusCode(httpResponse.statusCode)
+        }
 
         return try decoder.decode([ContributionModerationItemDTO].self, from: data)
     }
 
     func updateContributionStatus(id: String, status: ContributionModerationStatus) async throws -> ContributionModerationItemDTO {
+        guard let token = BackendConfiguration.adminBearerToken else { throw APIError.adminAuthNotConfigured }
         let url = baseURL.appendingPathComponent("api/v1/admin/contributions/\(id)/status")
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try encoder.encode(ContributionModerationStatusRequest(status: status))
 
         do {
@@ -134,7 +158,11 @@ struct MuseumAPIClient {
             switch httpResponse.statusCode {
             case 200...299:
                 return try decoder.decode(ContributionModerationItemDTO.self, from: data)
-            case 400, 401, 403, 404, 409, 422:
+            case 401:
+                throw APIError.adminUnauthorized
+            case 503:
+                throw APIError.adminAuthNotConfigured
+            case 400, 403, 404, 409, 422:
                 throw APIError.validationFailed
             case 500...599:
                 throw APIError.backendUnavailable

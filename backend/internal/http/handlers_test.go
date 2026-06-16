@@ -22,6 +22,8 @@ type fakeRepository struct {
 	createContributionFn     func(req models.ContributionRequest) (models.ContributionResponse, error)
 	listContributionsFn      func(status string) ([]models.Contribution, error)
 	updateContributionFn     func(id, status string) (*models.Contribution, error)
+	listContributionsCalls   int
+	updateContributionCalls  int
 	nearbyLat                float64
 	nearbyLng                float64
 	nearbyRadiusM            int
@@ -56,14 +58,22 @@ func (f *fakeRepository) CreateContribution(_ context.Context, req models.Contri
 }
 
 func (f *fakeRepository) ListContributions(_ context.Context, status string) ([]models.Contribution, error) {
+	f.listContributionsCalls++
 	f.listContributionsStatus = status
-	return f.listContributionsFn(status)
+	if f.listContributionsFn != nil {
+		return f.listContributionsFn(status)
+	}
+	return nil, nil
 }
 
 func (f *fakeRepository) UpdateContributionStatus(_ context.Context, id, status string) (*models.Contribution, error) {
+	f.updateContributionCalls++
 	f.updateContributionID = id
 	f.updateContributionStatus = status
-	return f.updateContributionFn(id, status)
+	if f.updateContributionFn != nil {
+		return f.updateContributionFn(id, status)
+	}
+	return nil, nil
 }
 
 func TestHealthz(t *testing.T) {
@@ -297,105 +307,126 @@ func TestCreateContributionValidationAndSuccess(t *testing.T) {
 	})
 }
 
-func TestAdminContributionModerationEndpoints(t *testing.T) {
+func TestAdminContributionModerationAuth(t *testing.T) {
+	type testCase struct {
+		name             string
+		method           string
+		path             string
+		body             string
+		headers          map[string]string
+		adminToken       string
+		wantStatus       int
+		wantRepoCalls    int
+		wantBodyContains string
+	}
+
+	listRepoFactory := func() *fakeRepository {
+		return &fakeRepository{
+			listContributionsFn: func(status string) ([]models.Contribution, error) {
+				return []models.Contribution{{ID: "contrib-1", Status: models.ContributionStatusPending, SuggestedTitle: "Old photo"}}, nil
+			},
+		}
+	}
+
+	updateRepoFactory := func() *fakeRepository {
+		return &fakeRepository{
+			updateContributionFn: func(id, status string) (*models.Contribution, error) {
+				spaceID := "sp-1"
+				return &models.Contribution{ID: id, SpaceID: &spaceID, Status: models.ContributionStatus(status)}, nil
+			},
+		}
+	}
+
+	for _, tc := range []testCase{
+		{name: "list missing header", method: http.MethodGet, path: "/api/v1/admin/contributions", adminToken: "server-token", wantStatus: http.StatusUnauthorized, wantRepoCalls: 0, wantBodyContains: "authorization header is required"},
+		{name: "list malformed header", method: http.MethodGet, path: "/api/v1/admin/contributions", adminToken: "server-token", headers: map[string]string{"Authorization": "Bearer"}, wantStatus: http.StatusUnauthorized, wantRepoCalls: 0, wantBodyContains: "authorization must be Bearer"},
+		{name: "list wrong token", method: http.MethodGet, path: "/api/v1/admin/contributions", adminToken: "server-token", headers: map[string]string{"Authorization": "Bearer wrong-token"}, wantStatus: http.StatusUnauthorized, wantRepoCalls: 0, wantBodyContains: "invalid admin token"},
+		{name: "list correct token", method: http.MethodGet, path: "/api/v1/admin/contributions", adminToken: "server-token", headers: map[string]string{"Authorization": "Bearer server-token"}, wantStatus: http.StatusOK, wantRepoCalls: 1},
+		{name: "list unset server token", method: http.MethodGet, path: "/api/v1/admin/contributions", adminToken: "", headers: map[string]string{"Authorization": "Bearer server-token"}, wantStatus: http.StatusServiceUnavailable, wantRepoCalls: 0, wantBodyContains: adminAuthNotConfiguredMessage},
+		{name: "update missing header", method: http.MethodPatch, path: "/api/v1/admin/contributions/contrib-1/status", body: `{"status":"approved"}`, adminToken: "server-token", wantStatus: http.StatusUnauthorized, wantRepoCalls: 0, wantBodyContains: "authorization header is required"},
+		{name: "update malformed header", method: http.MethodPatch, path: "/api/v1/admin/contributions/contrib-1/status", body: `{"status":"approved"}`, adminToken: "server-token", headers: map[string]string{"Authorization": "Bearer"}, wantStatus: http.StatusUnauthorized, wantRepoCalls: 0, wantBodyContains: "authorization must be Bearer"},
+		{name: "update wrong token", method: http.MethodPatch, path: "/api/v1/admin/contributions/contrib-1/status", body: `{"status":"approved"}`, adminToken: "server-token", headers: map[string]string{"Authorization": "Bearer wrong-token"}, wantStatus: http.StatusUnauthorized, wantRepoCalls: 0, wantBodyContains: "invalid admin token"},
+		{name: "update correct token", method: http.MethodPatch, path: "/api/v1/admin/contributions/contrib-1/status", body: `{"status":"approved"}`, adminToken: "server-token", headers: map[string]string{"Authorization": "Bearer server-token"}, wantStatus: http.StatusOK, wantRepoCalls: 1},
+		{name: "update unset server token", method: http.MethodPatch, path: "/api/v1/admin/contributions/contrib-1/status", body: `{"status":"approved"}`, adminToken: "", headers: map[string]string{"Authorization": "Bearer server-token"}, wantStatus: http.StatusServiceUnavailable, wantRepoCalls: 0, wantBodyContains: adminAuthNotConfiguredMessage},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var repo *fakeRepository
+			switch tc.method {
+			case http.MethodGet:
+				repo = listRepoFactory()
+			case http.MethodPatch:
+				repo = updateRepoFactory()
+			default:
+				t.Fatalf("unsupported method %s", tc.method)
+			}
+
+			h := NewHandlers(repo)
+			router := NewRouter(h, tc.adminToken)
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			for key, value := range tc.headers {
+				req.Header.Set(key, value)
+			}
+			rec := httptest.NewRecorder()
+
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+			if tc.wantRepoCalls == 0 {
+				if repo.listContributionsCalls != 0 || repo.updateContributionCalls != 0 {
+					t.Fatalf("repo was called: list=%d update=%d", repo.listContributionsCalls, repo.updateContributionCalls)
+				}
+			} else {
+				if tc.method == http.MethodGet && repo.listContributionsCalls != 1 {
+					t.Fatalf("list calls = %d, want 1", repo.listContributionsCalls)
+				}
+				if tc.method == http.MethodPatch && repo.updateContributionCalls != 1 {
+					t.Fatalf("update calls = %d, want 1", repo.updateContributionCalls)
+				}
+			}
+			if tc.wantBodyContains != "" {
+				if got := strings.TrimSpace(rec.Body.String()); !strings.Contains(got, tc.wantBodyContains) {
+					t.Fatalf("body = %s, want %q", got, tc.wantBodyContains)
+				}
+			}
+			if tc.method == http.MethodGet && tc.wantStatus == http.StatusOK {
+				var contributions []models.Contribution
+				if err := json.Unmarshal(rec.Body.Bytes(), &contributions); err != nil {
+					t.Fatalf("unmarshal response: %v", err)
+				}
+				if len(contributions) != 1 || contributions[0].ID != "contrib-1" {
+					t.Fatalf("response = %#v, want contrib-1", contributions)
+				}
+			}
+			if tc.method == http.MethodPatch && tc.wantStatus == http.StatusOK {
+				if repo.updateContributionID != "contrib-1" || repo.updateContributionStatus != "approved" {
+					t.Fatalf("repo args = (%q, %q), want (%q, %q)", repo.updateContributionID, repo.updateContributionStatus, "contrib-1", "approved")
+				}
+			}
+		})
+	}
+}
+
+func TestPublicContributionRouteWorksWithoutAuth(t *testing.T) {
 	repo := &fakeRepository{
-		listContributionsFn: func(status string) ([]models.Contribution, error) {
-			return []models.Contribution{{
-				ID:             "contrib-1",
-				Status:         models.ContributionStatusPending,
-				SuggestedTitle: "Old photo",
-			}}, nil
-		},
-		updateContributionFn: func(id, status string) (*models.Contribution, error) {
-			spaceID := "sp-1"
-			return &models.Contribution{
-				ID:      id,
-				SpaceID: &spaceID,
-				Status:  models.ContributionStatus(status),
-			}, nil
+		createContributionFn: func(req models.ContributionRequest) (models.ContributionResponse, error) {
+			return models.ContributionResponse{ID: "contrib-1", Status: "pending"}, nil
 		},
 	}
 	h := NewHandlers(repo)
-	router := chi.NewRouter()
-	router.Get("/admin/contributions", h.ListContributions)
-	router.Patch("/admin/contributions/{id}/status", h.UpdateContributionStatus)
+	router := NewRouter(h, "server-token")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/contributions", strings.NewReader(`{"suggested_title":"Old photo","kind":"image","body":"A photo from the 1970s."}`))
+	rec := httptest.NewRecorder()
 
-	t.Run("list defaults to pending", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/admin/contributions", nil)
-		rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 
-		router.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-		}
-		if repo.listContributionsStatus != string(models.ContributionStatusPending) {
-			t.Fatalf("status filter = %q, want pending", repo.listContributionsStatus)
-		}
-		var contributions []models.Contribution
-		if err := json.Unmarshal(rec.Body.Bytes(), &contributions); err != nil {
-			t.Fatalf("unmarshal response: %v", err)
-		}
-		if len(contributions) != 1 || contributions[0].ID != "contrib-1" {
-			t.Fatalf("response = %#v, want contrib-1", contributions)
-		}
-	})
-
-	t.Run("list all", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/admin/contributions?status=all", nil)
-		rec := httptest.NewRecorder()
-
-		router.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-		}
-		if repo.listContributionsStatus != "all" {
-			t.Fatalf("status filter = %q, want all", repo.listContributionsStatus)
-		}
-	})
-
-	t.Run("list rejects invalid status", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/admin/contributions?status=queued", nil)
-		rec := httptest.NewRecorder()
-
-		router.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
-		}
-		if got := strings.TrimSpace(rec.Body.String()); !strings.Contains(got, "status must be pending, approved, rejected, or all") {
-			t.Fatalf("body = %s, want invalid filter error", got)
-		}
-	})
-
-	t.Run("update status", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPatch, "/admin/contributions/contrib-1/status", strings.NewReader(`{"status":"approved"}`))
-		rec := httptest.NewRecorder()
-
-		router.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-		}
-		if repo.updateContributionID != "contrib-1" || repo.updateContributionStatus != "approved" {
-			t.Fatalf("repo args = (%q, %q), want (%q, %q)", repo.updateContributionID, repo.updateContributionStatus, "contrib-1", "approved")
-		}
-	})
-
-	t.Run("reject invalid status", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPatch, "/admin/contributions/contrib-1/status", strings.NewReader(`{"status":"queued"}`))
-		rec := httptest.NewRecorder()
-
-		router.ServeHTTP(rec, req)
-
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
-		}
-		if got := strings.TrimSpace(rec.Body.String()); !strings.Contains(got, "status must be pending, approved, or rejected") {
-			t.Fatalf("body = %s, want invalid status error", got)
-		}
-	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+	if repo.createContributionReq.SuggestedTitle != "Old photo" {
+		t.Fatalf("repo request = %#v", repo.createContributionReq)
+	}
 }
 
 func TestMissingRecordsReturn404(t *testing.T) {

@@ -2,8 +2,10 @@ import SwiftUI
 
 struct ProfileView: View {
     @Environment(MuseumStore.self) private var store
+    @AppStorage(BackendConfiguration.adminBearerTokenDefaultsKey) private var adminBearerToken = ""
     @Binding var selectedTab: MuseumTab
     @State private var showingModeration = false
+    @State private var adminTokenDraft = ""
 
     private let identityName = "Alex Curator"
     private let identityRole = "Local Explorer"
@@ -138,6 +140,7 @@ struct ProfileView: View {
                     }
 
                     apiBaseURLRow
+                    adminTokenSection
 
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 8) {
@@ -184,16 +187,22 @@ struct ProfileView: View {
 
             actionCard(
                 title: "Prototype mode",
-                subtitle: "This screen is a polished mock identity — no authentication or personal data sync.",
+                subtitle: "This screen is a polished mock identity — no personal data sync.",
                 icon: "sparkles",
                 tint: Museum.purple
             ) {
-                Button {
-                    showingModeration = true
-                } label: {
-                    Label("Open moderation", systemImage: "checklist")
+                if adminBearerToken.isEmpty {
+                    Label("Admin token required", systemImage: "lock.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Museum.faint)
+                } else {
+                    Button {
+                        showingModeration = true
+                    } label: {
+                        Label("Open moderation", systemImage: "checklist")
+                    }
+                    .buttonStyle(.museum(.secondary, size: .regular))
                 }
-                .buttonStyle(.museum(.secondary, size: .regular))
 
                 Button {
                     selectedTab = .explore
@@ -377,11 +386,68 @@ struct ProfileView: View {
         .overlay(RoundedRectangle(cornerRadius: Museum.Radius.md, style: .continuous).stroke(Museum.border, lineWidth: 1))
     }
 
+    private var adminTokenSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Museum.purple)
+                    .frame(width: 28, height: 28)
+                    .background(Museum.purple.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Admin bearer token")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .tracking(1.1)
+                        .foregroundStyle(Museum.faint)
+                    Text(adminBearerToken.isEmpty ? "Required for moderation" : "Saved ••••\(maskedTokenSuffix)")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Museum.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            SecureField("Enter admin token", text: $adminTokenDraft)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textFieldStyle(.roundedBorder)
+
+            HStack(spacing: 10) {
+                Button {
+                    let trimmed = adminTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    adminBearerToken = trimmed
+                    adminTokenDraft = ""
+                } label: {
+                    Label("Save token", systemImage: "tray.and.arrow.down.fill")
+                }
+                .buttonStyle(.museum(.primary, size: .regular))
+                .disabled(adminTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button {
+                    adminBearerToken = ""
+                    adminTokenDraft = ""
+                } label: {
+                    Label("Clear", systemImage: "trash")
+                }
+                .buttonStyle(.museum(.secondary, size: .regular))
+                .disabled(adminBearerToken.isEmpty && adminTokenDraft.isEmpty)
+            }
+        }
+        .padding(.top, 2)
+    }
+
     private var statusTint: Color {
         switch store.nearbySpacesState {
         case .loading: Museum.blue
         case .loadedFromBackend: Museum.green
         case .sampleFallback: Museum.purple
         }
+    }
+
+    private var maskedTokenSuffix: String {
+        String((BackendConfiguration.adminBearerToken ?? "").suffix(4)).uppercased()
     }
 }

@@ -37,6 +37,9 @@ final class MuseumStore {
     enum ModerationQueueState: Equatable {
         case loading
         case loadedFromBackend
+        case adminTokenRequired
+        case adminTokenInvalid
+        case adminAuthNotConfigured
         case sampleFallback(reason: String)
     }
 
@@ -147,22 +150,57 @@ final class MuseumStore {
         moderationQueueState = .loading
         moderationMessage = nil
 
+        if repository.requiresAdminBearerToken, BackendConfiguration.adminBearerToken == nil {
+            moderationQueue = []
+            moderationQueueState = .adminTokenRequired
+            moderationMessage = "Set an admin token in Profile to load the moderation queue."
+            return
+        }
+
         do {
             let fetched = try await repository.fetchModerationQueue()
             moderationQueue = fetched.filter { $0.status == .pending }
             moderationQueueState = .loadedFromBackend
         } catch {
+            if case MuseumAPIClient.APIError.adminUnauthorized = error {
+                moderationQueue = []
+                moderationQueueState = .adminTokenInvalid
+                moderationMessage = "Admin token was rejected by the backend."
+                return
+            }
+            if case MuseumAPIClient.APIError.adminAuthNotConfigured = error {
+                moderationQueue = []
+                moderationQueueState = .adminAuthNotConfigured
+                moderationMessage = "Backend admin auth is not configured yet."
+                return
+            }
             moderationQueue = SampleData.moderationQueue.filter { $0.status == .pending }
             moderationQueueState = .sampleFallback(reason: fallbackReason(for: error))
         }
     }
 
     func reviewContribution(id: String, status: ContributionModerationStatus) async {
+        if repository.requiresAdminBearerToken, BackendConfiguration.adminBearerToken == nil {
+            moderationQueueState = .adminTokenRequired
+            moderationMessage = "Set an admin token in Profile to review contributions."
+            return
+        }
+
         do {
             let updated = try await repository.updateContributionStatus(id: id, status: status)
             moderationQueue.removeAll { $0.id == updated.id }
             moderationMessage = "Updated \(updated.suggestedTitle) to \(status.label.lowercased())."
         } catch {
+            if case MuseumAPIClient.APIError.adminUnauthorized = error {
+                moderationQueueState = .adminTokenInvalid
+                moderationMessage = "Admin token was rejected by the backend."
+                return
+            }
+            if case MuseumAPIClient.APIError.adminAuthNotConfigured = error {
+                moderationQueueState = .adminAuthNotConfigured
+                moderationMessage = "Backend admin auth is not configured yet."
+                return
+            }
             if case .sampleFallback = moderationQueueState {
                 moderationQueue.removeAll { $0.id == id }
                 moderationMessage = "Saved locally only. \(fallbackReason(for: error))."
@@ -203,6 +241,10 @@ final class MuseumStore {
             return "Backend unavailable"
         case MuseumAPIClient.APIError.invalidResponse:
             return "Bad backend response"
+        case MuseumAPIClient.APIError.adminAuthNotConfigured:
+            return "Backend admin auth is not configured"
+        case MuseumAPIClient.APIError.adminUnauthorized:
+            return "Admin token rejected"
         case MuseumAPIClient.APIError.unexpectedStatusCode(let statusCode) where statusCode == 404:
             return "Contribution not found"
         case MuseumAPIClient.APIError.unexpectedStatusCode(let statusCode):

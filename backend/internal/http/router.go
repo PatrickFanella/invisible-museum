@@ -7,7 +7,7 @@ import (
 )
 
 // NewRouter wires all API routes.
-func NewRouter(h *Handlers) http.Handler {
+func NewRouter(h *Handlers, adminBearerToken string) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/healthz", h.Healthz)
 	r.Route("/api/v1", func(r chi.Router) {
@@ -16,8 +16,8 @@ func NewRouter(h *Handlers) http.Handler {
 		r.Get("/spaces/{space_id}", h.GetSpace)
 		r.Get("/exhibits/{exhibit_id}", h.GetExhibit)
 		r.Post("/contributions", h.CreateContribution)
-		// Dev-only moderation endpoints for the local prototype; intentionally unauthenticated.
 		r.Route("/admin", func(r chi.Router) {
+			r.Use(adminAuthMiddleware(adminBearerToken))
 			r.Get("/contributions", h.ListContributions)
 			r.Patch("/contributions/{id}/status", h.UpdateContributionStatus)
 		})

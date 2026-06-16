@@ -8,8 +8,9 @@ import (
 
 // Config holds runtime settings for the API.
 type Config struct {
-	APIAddr     string
-	DatabaseURL string
+	APIAddr          string
+	DatabaseURL      string
+	AdminBearerToken string
 }
 
 // Load reads configuration from environment variables.
@@ -24,5 +25,9 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
 
-	return Config{APIAddr: addr, DatabaseURL: databaseURL}, nil
+	return Config{
+		APIAddr:          addr,
+		DatabaseURL:      databaseURL,
+		AdminBearerToken: strings.TrimSpace(os.Getenv("ADMIN_BEARER_TOKEN")),
+	}, nil
 }

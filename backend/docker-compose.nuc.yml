@@ -39,6 +39,7 @@ services:
     environment:
       API_ADDR: ":8080"
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      ADMIN_BEARER_TOKEN: ${ADMIN_BEARER_TOKEN:?set ADMIN_BEARER_TOKEN in .env}
     networks:
       - museum_net
     ports:

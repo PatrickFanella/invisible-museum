@@ -124,7 +124,6 @@ func (h *Handlers) CreateContribution(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListContributions returns moderation queue items.
-// Dev-only local prototype route: intentionally unauthenticated.
 func (h *Handlers) ListContributions(w http.ResponseWriter, r *http.Request) {
 	status, err := parseContributionStatusFilter(r)
 	if err != nil {
@@ -141,7 +140,6 @@ func (h *Handlers) ListContributions(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateContributionStatus changes a moderation state.
-// Dev-only local prototype route: intentionally unauthenticated.
 func (h *Handlers) UpdateContributionStatus(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if id == "" {

@@ -81,6 +81,9 @@ The backend exposes:
 - `GET /api/v1/admin/contributions?status=pending|approved|rejected|all`
 - `PATCH /api/v1/admin/contributions/{id}/status`
 
+Admin moderation routes require `Authorization: Bearer <ADMIN_BEARER_TOKEN>`.
+If `ADMIN_BEARER_TOKEN` is unset on the server, admin routes return 503 and stay closed.
+
 Migrations seed Downers Grove test data.
 
 ## iOS app
@@ -116,6 +119,8 @@ Override order in the app:
 3. Info.plist key `InvisibleMuseum.apiBaseURL`
 4. Default `http://localhost:8080`
 
+The local iOS admin token is stored in `UserDefaults["InvisibleMuseum.adminBearerToken"]`.
+
 For NUC/Almaz deployment, the intended shape is:
 
 ```txt
@@ -128,6 +133,7 @@ iOS app
 ## Notes
 
 - Real ARKit/RealityKit behavior is still stubbed/simulated.
-- There is no auth yet.
-- Contribution moderation is available in the Profile screen; admin endpoints are dev-only and unauthenticated.
+- Contribution moderation is available in the Profile screen; set an admin token first.
+- Use HTTPS for any non-local admin access.
+- Rotate the admin token by updating the env var and restarting the backend.
 - App icon is currently a generated placeholder.

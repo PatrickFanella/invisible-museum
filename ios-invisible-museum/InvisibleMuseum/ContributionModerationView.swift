@@ -8,7 +8,9 @@ struct ContributionModerationView: View {
             MuseumScreen {
                 header
                 statusBanner
-                if store.moderationQueue.isEmpty {
+                if store.moderationQueueState == .adminTokenRequired || store.moderationQueueState == .adminTokenInvalid || store.moderationQueueState == .adminAuthNotConfigured {
+                    authStateCard
+                } else if store.moderationQueue.isEmpty {
                     emptyState
                 } else {
                     ForEach(store.moderationQueue) { contribution in
@@ -52,6 +54,27 @@ struct ContributionModerationView: View {
             }
             .padding(14)
             .museumGlassCard(radius: Museum.Radius.md, fill: Museum.surfaceElevated.opacity(0.7))
+        case .adminTokenRequired:
+            moderationNotice(
+                title: "Admin token required",
+                subtitle: "Set your local token in Profile before loading moderation items.",
+                tint: Museum.faint,
+                icon: "lock.fill"
+            )
+        case .adminTokenInvalid:
+            moderationNotice(
+                title: "Admin token invalid",
+                subtitle: "The backend rejected the saved token. Update it in Profile.",
+                tint: Museum.danger,
+                icon: "xmark.seal.fill"
+            )
+        case .adminAuthNotConfigured:
+            moderationNotice(
+                title: "Admin auth unavailable",
+                subtitle: "The backend is not configured for admin bearer auth yet.",
+                tint: Museum.purple,
+                icon: "exclamationmark.triangle.fill"
+            )
         case .loadedFromBackend:
             moderationNotice(
                 title: "Live backend connected",
@@ -86,6 +109,20 @@ struct ContributionModerationView: View {
                 Label("Refresh", systemImage: "arrow.clockwise")
             }
             .buttonStyle(.museum(.secondary, size: .small))
+        }
+    }
+
+    private var authStateCard: some View {
+        MuseumCard(radius: Museum.Radius.lg, fill: Museum.surfaceElevated.opacity(0.5), stroke: Museum.border, padding: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Moderation locked", systemImage: "lock.shield")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Museum.text)
+                Text("Enter an admin bearer token in Profile to load or review the queue.")
+                    .font(Museum.bodyFont(13))
+                    .foregroundStyle(Museum.muted)
+                    .lineSpacing(3)
+            }
         }
     }
 
