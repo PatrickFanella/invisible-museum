@@ -1,0 +1,123 @@
+# Invisible Museum
+
+SwiftUI iOS prototype plus a Dockerized Go/PostgreSQL backend for local, place-based museum exhibits.
+
+## What is here
+
+- `ios-invisible-museum/` — SwiftUI app.
+- `backend/` — Go REST API, PostgreSQL, and Goose migrations.
+- `Augmented Reality Museum App/` — imported TypeScript mockup used as the visual reference.
+- `docs/superpowers/plans/` — implementation planning notes.
+- `Makefile` — root commands for backend, migrations, API smoke tests, and Simulator runs.
+
+## Requirements
+
+- Docker Desktop or Docker Engine
+- Xcode
+- iOS Simulator
+- Optional local Go toolchain if you want to run backend tests outside Docker
+
+## Quick start
+
+```bash
+make backend-up
+```
+
+In another shell:
+
+```bash
+make api-health
+make api-nearby
+make ios-run
+```
+
+The iOS app defaults to:
+
+```txt
+http://localhost:8080
+```
+
+That works for the iOS Simulator when the backend is running locally.
+
+## Useful commands
+
+```bash
+make help
+make backend-up
+make backend-up-detached
+make backend-down
+make backend-logs
+make migrate
+make migrate-status
+make migrate-down
+make db-shell
+make db-reset
+make api-health
+make api-spaces
+make api-nearby
+make ios-build
+make ios-run
+make ios-simulators
+```
+
+## Backend
+
+The backend exposes:
+
+- `GET /healthz`
+- `GET /api/v1/spaces`
+- `GET /api/v1/spaces/nearby?lat=41.794&lng=-88.007&radius_m=5000`
+- `GET /api/v1/spaces/{space_id}`
+- `GET /api/v1/exhibits/{exhibit_id}`
+- `POST /api/v1/contributions`
+
+Migrations seed Downers Grove test data.
+
+## iOS app
+
+Current tabs:
+
+- Explore
+- Contribute
+- Collection
+- Profile
+
+The app uses a SwiftUI design system built around semantic tokens and reusable primitives:
+
+- `Theme.swift`
+- `MuseumScreen.swift`
+- `MuseumCard.swift`
+- `MuseumButton.swift`
+- `MuseumChip.swift`
+- `MuseumField.swift`
+- `MuseumSection.swift`
+- `MuseumBottomBar.swift`
+
+If the backend is unavailable, the app falls back to bundled sample data and shows the fallback state in Explore/Profile.
+
+## API URL configuration
+
+The default API base URL is `http://localhost:8080`.
+
+Override order in the app:
+
+1. `UserDefaults["InvisibleMuseum.apiBaseURL"]`
+2. Process environment `InvisibleMuseum.apiBaseURL`
+3. Info.plist key `InvisibleMuseum.apiBaseURL`
+4. Default `http://localhost:8080`
+
+For NUC/Almaz deployment, the intended shape is:
+
+```txt
+iOS app
+  -> https://museum-api.example.com
+  -> Cloudflare / Caddy on Almaz
+  -> Go API + PostgreSQL on NUC
+```
+
+## Notes
+
+- Real ARKit/RealityKit behavior is still stubbed/simulated.
+- There is no auth yet.
+- Contribution moderation is backend-only data for now; no admin UI yet.
+- App icon asset still needs a real `icon.png`.
