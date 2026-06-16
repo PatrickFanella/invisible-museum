@@ -5,7 +5,8 @@ struct MuseumBottomBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            tabButton(.explore, icon: "map.fill")
+            tabButton(.explore, icon: "sparkles")
+            tabButton(.map, icon: "map.fill")
             tabButton(.contribute, icon: "plus.bubble.fill")
             tabButton(.saved, icon: "heart.fill")
             tabButton(.profile, icon: "person.crop.circle.fill")
@@ -32,11 +33,11 @@ struct MuseumBottomBar: View {
                         .minimumScaleFactor(0.78)
                 }
             }
-            .font(.system(size: 13, weight: .bold))
+            .font(.system(size: 12, weight: .bold))
             .foregroundStyle(selection == item ? .black : Color.white.opacity(0.62))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .padding(.horizontal, selection == item ? 14 : 12)
+            .padding(.vertical, 11)
+            .padding(.horizontal, selection == item ? 10 : 8)
             .background(selection == item ? Museum.blue : Color.clear, in: Capsule())
         }
         .buttonStyle(.plain)
@@ -46,7 +47,8 @@ struct MuseumBottomBar: View {
 extension MuseumTab {
     var iconName: String {
         switch self {
-        case .explore: "map.fill"
+        case .explore: "sparkles"
+        case .map: "map.fill"
         case .contribute: "plus.bubble.fill"
         case .saved: "heart.fill"
         case .profile: "person.crop.circle.fill"

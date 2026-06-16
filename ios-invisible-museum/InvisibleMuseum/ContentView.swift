@@ -14,6 +14,7 @@ struct ContentView: View {
             Group {
                 switch tab {
                 case .explore: ExploreView()
+                case .map: MapListView()
                 case .contribute: ContributeView()
                 case .saved: SavedView(selectedTab: $tab)
                 case .profile: ProfileView(selectedTab: $tab)
@@ -31,6 +32,7 @@ struct ContentView: View {
 
 enum MuseumTab: String, CaseIterable {
     case explore = "Explore"
+    case map = "Map"
     case contribute = "Contribute"
     case saved = "Collection"
     case profile = "Profile"

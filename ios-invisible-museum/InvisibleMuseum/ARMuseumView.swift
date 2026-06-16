@@ -324,7 +324,7 @@ private struct GuidanceCard: View {
     private var title: String {
         switch proximity {
         case .tooFar:
-            return "Too far for AR"
+            return "Map guidance"
         case .unknown:
             if authorizationState == .denied { return "Location denied" }
             return "Finding your location"
@@ -337,7 +337,7 @@ private struct GuidanceCard: View {
         switch proximity {
         case .tooFar(let distanceMeters, let bearingDegrees):
             let direction = GeoMath.compassDirection(for: bearingDegrees)
-            return "Walk \(GeoMath.formatDistance(distanceMeters)) toward \(direction) to reach \(space.name)."
+            return "Too far for AR. Use this map or walk \(GeoMath.formatDistance(distanceMeters)) toward \(direction) to reach \(space.name)."
         case .unknown:
             if authorizationState == .denied {
                 return lastErrorMessage ?? "Location access is off, so AR guidance is unavailable."
