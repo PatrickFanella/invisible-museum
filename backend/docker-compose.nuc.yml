@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      museum_net:
+        aliases:
+          - postgres
+    environment:
+      POSTGRES_DB: invisible_museum
+      POSTGRES_USER: ${POSTGRES_USER:-museum}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-museum} -d invisible_museum"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: gomicro/goose:3.24.1
+    restart: "no"
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: ${DATABASE_URL:?set DATABASE_URL in .env}
+    networks:
+      - museum_net
+    volumes:
+      - ./migrations:/migrations
+    command: ["goose", "-dir", "/migrations", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      API_ADDR: ":8080"
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+    networks:
+      - museum_net
+    ports:
+      - "${API_PUBLISHED_ADDR:-8080}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+
+networks:
+  museum_net:

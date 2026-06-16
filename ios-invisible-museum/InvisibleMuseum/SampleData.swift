@@ -39,4 +39,29 @@ enum SampleData {
             ]
         )
     ]
+
+    static let moderationQueue: [ContributionModerationItem] = [
+        ContributionModerationItem(
+            id: "contrib-101",
+            spaceID: "sp-station",
+            suggestedTitle: "Platform timetable photo",
+            kind: .image,
+            body: "A snapshot of the old timetable board before the station renovation.",
+            contributorName: "Mina Park",
+            status: .pending,
+            createdAt: .now.addingTimeInterval(-3_600),
+            updatedAt: .now.addingTimeInterval(-3_600)
+        ),
+        ContributionModerationItem(
+            id: "contrib-102",
+            spaceID: "sp-library",
+            suggestedTitle: "Reading room oral history",
+            kind: .story,
+            body: "A short memory from someone who learned to read in the original library annex.",
+            contributorName: "Alex Curator",
+            status: .pending,
+            createdAt: .now.addingTimeInterval(-7_200),
+            updatedAt: .now.addingTimeInterval(-7_200)
+        )
+    ]
 }

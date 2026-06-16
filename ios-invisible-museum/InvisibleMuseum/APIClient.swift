@@ -107,6 +107,47 @@ struct MuseumAPIClient {
         }
     }
 
+    func fetchModerationQueue(status: ContributionModerationStatus = .pending) async throws -> [ContributionModerationItemDTO] {
+        var components = URLComponents(url: baseURL.appendingPathComponent("api/v1/admin/contributions"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "status", value: status.rawValue)]
+
+        guard let url = components?.url else { throw APIError.invalidResponse }
+
+        let (data, response) = try await session.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        guard (200...299).contains(httpResponse.statusCode) else { throw APIError.unexpectedStatusCode(httpResponse.statusCode) }
+
+        return try decoder.decode([ContributionModerationItemDTO].self, from: data)
+    }
+
+    func updateContributionStatus(id: String, status: ContributionModerationStatus) async throws -> ContributionModerationItemDTO {
+        let url = baseURL.appendingPathComponent("api/v1/admin/contributions/\(id)/status")
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(ContributionModerationStatusRequest(status: status))
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+
+            switch httpResponse.statusCode {
+            case 200...299:
+                return try decoder.decode(ContributionModerationItemDTO.self, from: data)
+            case 400, 401, 403, 404, 409, 422:
+                throw APIError.validationFailed
+            case 500...599:
+                throw APIError.backendUnavailable
+            default:
+                throw APIError.unexpectedStatusCode(httpResponse.statusCode)
+            }
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.backendUnavailable
+        }
+    }
+
     private var encoder: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .useDefaultKeys
@@ -233,6 +274,63 @@ struct ContributionSubmissionDTO: Decodable {
 
     let id: String
     let status: Status
+}
+
+struct ContributionModerationItemDTO: Decodable {
+    let id: String
+    let spaceID: String?
+    let suggestedTitle: String
+    let kind: ExhibitKind
+    let body: String
+    let contributorName: String
+    let status: ContributionModerationStatus
+    let createdAt: String
+    let updatedAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case spaceID = "space_id"
+        case suggestedTitle = "suggested_title"
+        case kind
+        case body
+        case contributorName = "contributor_name"
+        case status
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    func toModel() -> ContributionModerationItem {
+        ContributionModerationItem(
+            id: id,
+            spaceID: spaceID,
+            suggestedTitle: suggestedTitle,
+            kind: kind,
+            body: body,
+            contributorName: contributorName,
+            status: status,
+            createdAt: Self.parseDate(createdAt),
+            updatedAt: Self.parseDate(updatedAt)
+        )
+    }
+
+    private static func parseDate(_ value: String) -> Date {
+        if let date = ISO8601DateFormatter.improved.date(from: value) {
+            return date
+        }
+        return .now
+    }
+}
+
+private struct ContributionModerationStatusRequest: Encodable {
+    let status: ContributionModerationStatus
+}
+
+private extension ISO8601DateFormatter {
+    static let improved: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }
 
 private struct ContributionSubmissionRequest: Encodable {

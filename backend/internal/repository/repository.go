@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -191,6 +192,58 @@ func (r *Repository) CreateContribution(ctx context.Context, req models.Contribu
 	return response, nil
 }
 
+// ListContributions returns contributions, optionally filtered by moderation status.
+func (r *Repository) ListContributions(ctx context.Context, status string) ([]models.Contribution, error) {
+	query := `
+		SELECT id::text, space_id, suggested_title, kind, body, contributor_name, status, created_at, updated_at
+		FROM contributions
+	`
+	args := []any{}
+	if status != "all" {
+		query += " WHERE status = $1"
+		args = append(args, status)
+	}
+	query += " ORDER BY created_at DESC, suggested_title ASC"
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list contributions: %w", err)
+	}
+	defer rows.Close()
+
+	contributions := make([]models.Contribution, 0)
+	for rows.Next() {
+		contribution, err := scanContribution(rows)
+		if err != nil {
+			return nil, err
+		}
+		contributions = append(contributions, contribution)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list contributions rows: %w", err)
+	}
+	return contributions, nil
+}
+
+// UpdateContributionStatus changes a contribution moderation status.
+func (r *Repository) UpdateContributionStatus(ctx context.Context, id string, status string) (*models.Contribution, error) {
+	row := r.db.QueryRow(ctx, `
+		UPDATE contributions
+		SET status = $2, updated_at = now()
+		WHERE id = $1
+		RETURNING id::text, space_id, suggested_title, kind, body, contributor_name, status, created_at, updated_at
+	`, id, status)
+
+	contribution, err := scanContribution(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &contribution, nil
+}
+
 func (r *Repository) attachExhibits(ctx context.Context, spaces []models.Space) error {
 	for i := range spaces {
 		exhibits, err := r.ListExhibits(ctx, spaces[i].ID)
@@ -273,4 +326,29 @@ func scanExhibit(row interface{ Scan(dest ...any) error }) (models.Exhibit, erro
 		exhibit.DurationSeconds = &value
 	}
 	return exhibit, nil
+}
+
+func scanContribution(row interface{ Scan(dest ...any) error }) (models.Contribution, error) {
+	var contribution models.Contribution
+	var spaceID sql.NullString
+	var status string
+	if err := row.Scan(
+		&contribution.ID,
+		&spaceID,
+		&contribution.SuggestedTitle,
+		&contribution.Kind,
+		&contribution.Body,
+		&contribution.ContributorName,
+		&status,
+		&contribution.CreatedAt,
+		&contribution.UpdatedAt,
+	); err != nil {
+		return models.Contribution{}, fmt.Errorf("scan contribution: %w", err)
+	}
+	if spaceID.Valid {
+		trimmed := strings.TrimSpace(spaceID.String)
+		contribution.SpaceID = &trimmed
+	}
+	contribution.Status = models.ContributionStatus(status)
+	return contribution, nil
 }

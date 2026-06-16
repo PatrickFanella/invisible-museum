@@ -3,6 +3,7 @@ import SwiftUI
 struct ProfileView: View {
     @Environment(MuseumStore.self) private var store
     @Binding var selectedTab: MuseumTab
+    @State private var showingModeration = false
 
     private let identityName = "Alex Curator"
     private let identityRole = "Local Explorer"
@@ -15,6 +16,9 @@ struct ProfileView: View {
             backendSection
             actionsSection
             aboutSection
+        }
+        .sheet(isPresented: $showingModeration) {
+            ContributionModerationView()
         }
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -184,6 +188,13 @@ struct ProfileView: View {
                 icon: "sparkles",
                 tint: Museum.purple
             ) {
+                Button {
+                    showingModeration = true
+                } label: {
+                    Label("Open moderation", systemImage: "checklist")
+                }
+                .buttonStyle(.museum(.secondary, size: .regular))
+
                 Button {
                     selectedTab = .explore
                 } label: {

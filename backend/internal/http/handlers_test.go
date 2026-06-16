@@ -15,15 +15,20 @@ import (
 )
 
 type fakeRepository struct {
-	listSpacesFn          func() ([]models.Space, error)
-	nearbySpacesFn        func(lat, lng float64, radiusM int) ([]models.Space, error)
-	getSpaceFn            func(id string) (*models.Space, error)
-	getExhibitFn          func(id string) (*models.Exhibit, error)
-	createContributionFn  func(req models.ContributionRequest) (models.ContributionResponse, error)
-	nearbyLat             float64
-	nearbyLng             float64
-	nearbyRadiusM         int
-	createContributionReq models.ContributionRequest
+	listSpacesFn             func() ([]models.Space, error)
+	nearbySpacesFn           func(lat, lng float64, radiusM int) ([]models.Space, error)
+	getSpaceFn               func(id string) (*models.Space, error)
+	getExhibitFn             func(id string) (*models.Exhibit, error)
+	createContributionFn     func(req models.ContributionRequest) (models.ContributionResponse, error)
+	listContributionsFn      func(status string) ([]models.Contribution, error)
+	updateContributionFn     func(id, status string) (*models.Contribution, error)
+	nearbyLat                float64
+	nearbyLng                float64
+	nearbyRadiusM            int
+	createContributionReq    models.ContributionRequest
+	listContributionsStatus  string
+	updateContributionID     string
+	updateContributionStatus string
 }
 
 func (f *fakeRepository) ListSpaces(_ context.Context) ([]models.Space, error) {
@@ -48,6 +53,17 @@ func (f *fakeRepository) GetExhibit(_ context.Context, id string) (*models.Exhib
 func (f *fakeRepository) CreateContribution(_ context.Context, req models.ContributionRequest) (models.ContributionResponse, error) {
 	f.createContributionReq = req
 	return f.createContributionFn(req)
+}
+
+func (f *fakeRepository) ListContributions(_ context.Context, status string) ([]models.Contribution, error) {
+	f.listContributionsStatus = status
+	return f.listContributionsFn(status)
+}
+
+func (f *fakeRepository) UpdateContributionStatus(_ context.Context, id, status string) (*models.Contribution, error) {
+	f.updateContributionID = id
+	f.updateContributionStatus = status
+	return f.updateContributionFn(id, status)
 }
 
 func TestHealthz(t *testing.T) {
@@ -138,7 +154,7 @@ func TestNearbySpacesValidationAndSuccess(t *testing.T) {
 			return []models.Space{{
 				ID:             "sp-nearby",
 				Name:           "Nearby Space",
-				DistanceMeters:  321,
+				DistanceMeters: 321,
 				Exhibits:       []models.Exhibit{},
 			}}, nil
 		},
@@ -277,6 +293,107 @@ func TestCreateContributionValidationAndSuccess(t *testing.T) {
 		}
 		if got := strings.TrimSpace(rec.Body.String()); !strings.Contains(got, "space_id is invalid") {
 			t.Fatalf("body = %s, want space_id validation error", got)
+		}
+	})
+}
+
+func TestAdminContributionModerationEndpoints(t *testing.T) {
+	repo := &fakeRepository{
+		listContributionsFn: func(status string) ([]models.Contribution, error) {
+			return []models.Contribution{{
+				ID:             "contrib-1",
+				Status:         models.ContributionStatusPending,
+				SuggestedTitle: "Old photo",
+			}}, nil
+		},
+		updateContributionFn: func(id, status string) (*models.Contribution, error) {
+			spaceID := "sp-1"
+			return &models.Contribution{
+				ID:      id,
+				SpaceID: &spaceID,
+				Status:  models.ContributionStatus(status),
+			}, nil
+		},
+	}
+	h := NewHandlers(repo)
+	router := chi.NewRouter()
+	router.Get("/admin/contributions", h.ListContributions)
+	router.Patch("/admin/contributions/{id}/status", h.UpdateContributionStatus)
+
+	t.Run("list defaults to pending", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/contributions", nil)
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if repo.listContributionsStatus != string(models.ContributionStatusPending) {
+			t.Fatalf("status filter = %q, want pending", repo.listContributionsStatus)
+		}
+		var contributions []models.Contribution
+		if err := json.Unmarshal(rec.Body.Bytes(), &contributions); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if len(contributions) != 1 || contributions[0].ID != "contrib-1" {
+			t.Fatalf("response = %#v, want contrib-1", contributions)
+		}
+	})
+
+	t.Run("list all", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/contributions?status=all", nil)
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if repo.listContributionsStatus != "all" {
+			t.Fatalf("status filter = %q, want all", repo.listContributionsStatus)
+		}
+	})
+
+	t.Run("list rejects invalid status", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/contributions?status=queued", nil)
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+		if got := strings.TrimSpace(rec.Body.String()); !strings.Contains(got, "status must be pending, approved, rejected, or all") {
+			t.Fatalf("body = %s, want invalid filter error", got)
+		}
+	})
+
+	t.Run("update status", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/admin/contributions/contrib-1/status", strings.NewReader(`{"status":"approved"}`))
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if repo.updateContributionID != "contrib-1" || repo.updateContributionStatus != "approved" {
+			t.Fatalf("repo args = (%q, %q), want (%q, %q)", repo.updateContributionID, repo.updateContributionStatus, "contrib-1", "approved")
+		}
+	})
+
+	t.Run("reject invalid status", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/admin/contributions/contrib-1/status", strings.NewReader(`{"status":"queued"}`))
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+		if got := strings.TrimSpace(rec.Body.String()); !strings.Contains(got, "status must be pending, approved, or rejected") {
+			t.Fatalf("body = %s, want invalid status error", got)
 		}
 	})
 }

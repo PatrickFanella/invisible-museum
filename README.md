@@ -8,6 +8,7 @@ SwiftUI iOS prototype plus a Dockerized Go/PostgreSQL backend for local, place-b
 - `backend/` — Go REST API, PostgreSQL, and Goose migrations.
 - `Augmented Reality Museum App/` — imported TypeScript mockup used as the visual reference.
 - `docs/superpowers/plans/` — implementation planning notes.
+- `docs/deployment/nuc-almaz.md` — NUC/Almaz deployment notes.
 - `Makefile` — root commands for backend, migrations, API smoke tests, and Simulator runs.
 
 ## Requirements
@@ -29,6 +30,13 @@ In another shell:
 make api-health
 make api-nearby
 make ios-run
+```
+
+For deployment-oriented checks:
+
+```bash
+make nuc-up
+make nuc-smoke
 ```
 
 The iOS app defaults to:
@@ -70,6 +78,8 @@ The backend exposes:
 - `GET /api/v1/spaces/{space_id}`
 - `GET /api/v1/exhibits/{exhibit_id}`
 - `POST /api/v1/contributions`
+- `GET /api/v1/admin/contributions?status=pending|approved|rejected|all`
+- `PATCH /api/v1/admin/contributions/{id}/status`
 
 Migrations seed Downers Grove test data.
 
@@ -119,5 +129,5 @@ iOS app
 
 - Real ARKit/RealityKit behavior is still stubbed/simulated.
 - There is no auth yet.
-- Contribution moderation is backend-only data for now; no admin UI yet.
-- App icon asset still needs a real `icon.png`.
+- Contribution moderation is available in the Profile screen; admin endpoints are dev-only and unauthenticated.
+- App icon is currently a generated placeholder.

@@ -89,3 +89,27 @@ enum ExhibitKind: String, Codable, Sendable, CaseIterable {
 
 enum ExhibitStatus: String, Codable, Sendable { case published, underReview }
 enum ExhibitConfidence: String, Codable, Sendable { case high, medium, low }
+
+enum ContributionModerationStatus: String, Codable, Sendable, CaseIterable {
+    case pending, approved, rejected
+
+    var label: String {
+        switch self {
+        case .pending: "Pending"
+        case .approved: "Approved"
+        case .rejected: "Rejected"
+        }
+    }
+}
+
+struct ContributionModerationItem: Identifiable, Codable, Hashable, Sendable {
+    let id: String
+    let spaceID: String?
+    let suggestedTitle: String
+    let kind: ExhibitKind
+    let body: String
+    let contributorName: String
+    let status: ContributionModerationStatus
+    let createdAt: Date
+    let updatedAt: Date
+}

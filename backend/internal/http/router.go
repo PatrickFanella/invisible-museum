@@ -16,6 +16,11 @@ func NewRouter(h *Handlers) http.Handler {
 		r.Get("/spaces/{space_id}", h.GetSpace)
 		r.Get("/exhibits/{exhibit_id}", h.GetExhibit)
 		r.Post("/contributions", h.CreateContribution)
+		// Dev-only moderation endpoints for the local prototype; intentionally unauthenticated.
+		r.Route("/admin", func(r chi.Router) {
+			r.Get("/contributions", h.ListContributions)
+			r.Patch("/contributions/{id}/status", h.UpdateContributionStatus)
+		})
 	})
 	return r
 }

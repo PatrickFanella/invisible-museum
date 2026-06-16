@@ -19,6 +19,9 @@ final class MuseumStore {
     private let persistence: MuseumLocalPersistence
     private(set) var spaces: [MuseumSpace]
     private(set) var nearbySpacesState: NearbySpacesState = .loading
+    private(set) var moderationQueue: [ContributionModerationItem] = []
+    private(set) var moderationQueueState: ModerationQueueState = .loading
+    private(set) var moderationMessage: String?
     var savedExhibitIDs: Set<String> = []
     var downloadedSpaceIDs: Set<String>
     private var downloadedSpaceOverrides: [String: Bool] = [:]
@@ -26,6 +29,12 @@ final class MuseumStore {
 
 
     enum NearbySpacesState: Equatable {
+        case loading
+        case loadedFromBackend
+        case sampleFallback(reason: String)
+    }
+
+    enum ModerationQueueState: Equatable {
         case loading
         case loadedFromBackend
         case sampleFallback(reason: String)
@@ -53,6 +62,7 @@ final class MuseumStore {
         downloadedSpaceOverrides = overrides
         contributionCount = contributionTotal
         downloadedSpaceIDs = resolvedDownloadedIDs
+
     }
 
 
@@ -133,6 +143,35 @@ final class MuseumStore {
         return submission
     }
 
+    func loadModerationQueue() async {
+        moderationQueueState = .loading
+        moderationMessage = nil
+
+        do {
+            let fetched = try await repository.fetchModerationQueue()
+            moderationQueue = fetched.filter { $0.status == .pending }
+            moderationQueueState = .loadedFromBackend
+        } catch {
+            moderationQueue = SampleData.moderationQueue.filter { $0.status == .pending }
+            moderationQueueState = .sampleFallback(reason: fallbackReason(for: error))
+        }
+    }
+
+    func reviewContribution(id: String, status: ContributionModerationStatus) async {
+        do {
+            let updated = try await repository.updateContributionStatus(id: id, status: status)
+            moderationQueue.removeAll { $0.id == updated.id }
+            moderationMessage = "Updated \(updated.suggestedTitle) to \(status.label.lowercased())."
+        } catch {
+            if case .sampleFallback = moderationQueueState {
+                moderationQueue.removeAll { $0.id == id }
+                moderationMessage = "Saved locally only. \(fallbackReason(for: error))."
+                return
+            }
+            moderationMessage = fallbackReason(for: error)
+        }
+    }
+
 
     var savedExhibits: [(space: MuseumSpace, exhibit: Exhibit)] {
         spaces.flatMap { space in
@@ -164,6 +203,8 @@ final class MuseumStore {
             return "Backend unavailable"
         case MuseumAPIClient.APIError.invalidResponse:
             return "Bad backend response"
+        case MuseumAPIClient.APIError.unexpectedStatusCode(let statusCode) where statusCode == 404:
+            return "Contribution not found"
         case MuseumAPIClient.APIError.unexpectedStatusCode(let statusCode):
             return "Server \(statusCode)"
         case MuseumAPIClient.APIError.validationFailed:

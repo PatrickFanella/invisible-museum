@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // Space represents a museum space in the API contract.
 type Space struct {
 	ID               string    `json:"id"`
@@ -47,4 +49,36 @@ type ContributionRequest struct {
 type ContributionResponse struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
+}
+
+// ContributionStatus is the moderation state for a contribution.
+type ContributionStatus string
+
+const (
+	ContributionStatusPending  ContributionStatus = "pending"
+	ContributionStatusApproved ContributionStatus = "approved"
+	ContributionStatusRejected ContributionStatus = "rejected"
+)
+
+// Valid reports whether the status is one of the supported moderation states.
+func (s ContributionStatus) Valid() bool {
+	switch s {
+	case ContributionStatusPending, ContributionStatusApproved, ContributionStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Contribution represents a stored contribution for moderation and listing.
+type Contribution struct {
+	ID              string             `json:"id"`
+	SpaceID         *string            `json:"space_id"`
+	SuggestedTitle  string             `json:"suggested_title"`
+	Kind            string             `json:"kind"`
+	Body            string             `json:"body"`
+	ContributorName string             `json:"contributor_name"`
+	Status          ContributionStatus `json:"status"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
 }

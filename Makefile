@@ -2,6 +2,7 @@
 	backend-up backend-up-detached backend-down backend-restart backend-build backend-logs backend-ps \
 	migrate migrate-status migrate-down migrate-reset db-shell db-reset \
 	api-health api-spaces api-nearby \
+	nuc-up nuc-down nuc-logs nuc-smoke nuc-rollback \
 	ios-build ios-run ios-simulators
 
 BACKEND_DIR := backend
@@ -35,6 +36,12 @@ help:
 	@printf "  make api-health           Curl /healthz\n"
 	@printf "  make api-spaces           Curl /api/v1/spaces\n"
 	@printf "  make api-nearby           Curl nearby Downers Grove spaces\n\n"
+	@printf "NUC / Almaz deployment:\n"
+	@printf "  make nuc-up               Start deployment stack\n"
+	@printf "  make nuc-down             Stop deployment stack\n"
+	@printf "  make nuc-logs             Follow deployment logs\n"
+	@printf "  make nuc-smoke            Health + moderation smoke checks\n"
+	@printf "  make nuc-rollback         Goose rollback one migration\n\n"
 	@printf "iOS:\n"
 	@printf "  make ios-build            Build iOS app for simulator\n"
 	@printf "  make ios-run              Boot/install/launch on SIMULATOR_ID\n"
@@ -86,6 +93,24 @@ api-spaces:
 
 api-nearby:
 	curl "http://localhost:8080/api/v1/spaces/nearby?lat=$(NEARBY_LAT)&lng=$(NEARBY_LNG)&radius_m=$(NEARBY_RADIUS_M)"
+
+NUC_COMPOSE := -f backend/docker-compose.nuc.yml
+NUC_API_URL ?= http://localhost:8080
+
+nuc-up:
+	docker compose $(NUC_COMPOSE) up --build -d
+
+nuc-down:
+	docker compose $(NUC_COMPOSE) down
+
+nuc-logs:
+	docker compose $(NUC_COMPOSE) logs -f
+
+nuc-smoke:
+	curl "$(NUC_API_URL)/healthz" && curl "$(NUC_API_URL)/api/v1/admin/contributions?status=pending"
+
+nuc-rollback:
+	docker compose $(NUC_COMPOSE) run --rm migrate goose -dir /migrations down
 
 ios-build:
 	cd $(IOS_DIR) && xcodebuild -project "$(IOS_PROJECT)" -scheme "$(IOS_SCHEME)" -destination 'platform=iOS Simulator,id=$(SIMULATOR_ID)' SYMROOT="$(IOS_BUILD_DIR)" build

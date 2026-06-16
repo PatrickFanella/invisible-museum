@@ -22,6 +22,8 @@ type Repository interface {
 	GetSpace(ctx context.Context, id string) (*models.Space, error)
 	GetExhibit(ctx context.Context, id string) (*models.Exhibit, error)
 	CreateContribution(ctx context.Context, req models.ContributionRequest) (models.ContributionResponse, error)
+	ListContributions(ctx context.Context, status string) ([]models.Contribution, error)
+	UpdateContributionStatus(ctx context.Context, id string, status string) (*models.Contribution, error)
 }
 
 // Handlers bundles the HTTP route handlers.
@@ -121,6 +123,53 @@ func (h *Handlers) CreateContribution(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, response)
 }
 
+// ListContributions returns moderation queue items.
+// Dev-only local prototype route: intentionally unauthenticated.
+func (h *Handlers) ListContributions(w http.ResponseWriter, r *http.Request) {
+	status, err := parseContributionStatusFilter(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	contributions, err := h.repo.ListContributions(r.Context(), status)
+	if err != nil {
+		writeUnexpectedError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, contributions)
+}
+
+// UpdateContributionStatus changes a moderation state.
+// Dev-only local prototype route: intentionally unauthenticated.
+func (h *Handlers) UpdateContributionStatus(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	status, err := normalizeContributionStatus(req.Status)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	updated, err := h.repo.UpdateContributionStatus(r.Context(), id, status)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
 func parseNearbyQuery(r *http.Request) (float64, float64, int, error) {
 	query := r.URL.Query()
 	latRaw := strings.TrimSpace(query.Get("lat"))
@@ -167,6 +216,32 @@ func validateContributionRequest(req *models.ContributionRequest) error {
 	req.Body = strings.TrimSpace(req.Body)
 	req.ContributorName = strings.TrimSpace(req.ContributorName)
 	return nil
+}
+
+func parseContributionStatusFilter(r *http.Request) (string, error) {
+	status := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("status")))
+	if status == "" {
+		return string(models.ContributionStatusPending), nil
+	}
+	if status == "all" {
+		return status, nil
+	}
+	if normalized, err := normalizeContributionStatus(status); err == nil {
+		return normalized, nil
+	}
+	return "", fmt.Errorf("status must be pending, approved, rejected, or all")
+}
+
+func normalizeContributionStatus(raw string) (string, error) {
+	status := strings.TrimSpace(strings.ToLower(raw))
+	if status == "" {
+		return "", fmt.Errorf("status is required")
+	}
+	moderationStatus := models.ContributionStatus(status)
+	if !moderationStatus.Valid() {
+		return "", fmt.Errorf("status must be pending, approved, or rejected")
+	}
+	return status, nil
 }
 
 func writeRepoError(w http.ResponseWriter, err error) {
