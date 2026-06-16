@@ -16,6 +16,7 @@ struct ContentView: View {
                 case .explore: ExploreView()
                 case .contribute: ContributeView()
                 case .saved: SavedView(selectedTab: $tab)
+                case .profile: ProfileView(selectedTab: $tab)
                 }
             }
         }
@@ -32,6 +33,7 @@ enum MuseumTab: String, CaseIterable {
     case explore = "Explore"
     case contribute = "Contribute"
     case saved = "Collection"
+    case profile = "Profile"
 }
 
 #Preview { ContentView(store: MuseumStore(repository: SampleMuseumRepository())) }

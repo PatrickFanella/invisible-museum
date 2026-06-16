@@ -8,6 +8,7 @@ struct MuseumBottomBar: View {
             tabButton(.explore, icon: "map.fill")
             tabButton(.contribute, icon: "plus.bubble.fill")
             tabButton(.saved, icon: "heart.fill")
+            tabButton(.profile, icon: "person.crop.circle.fill")
         }
         .padding(8)
         .background(.black.opacity(0.78), in: Capsule())
@@ -27,6 +28,8 @@ struct MuseumBottomBar: View {
                 Image(systemName: icon)
                 if selection == item {
                     Text(item.rawValue)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                 }
             }
             .font(.system(size: 13, weight: .bold))
@@ -46,6 +49,7 @@ extension MuseumTab {
         case .explore: "map.fill"
         case .contribute: "plus.bubble.fill"
         case .saved: "heart.fill"
+        case .profile: "person.crop.circle.fill"
         }
     }
 }
