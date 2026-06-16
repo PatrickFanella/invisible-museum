@@ -28,6 +28,7 @@
 		A00100000000000000000033 /* ARCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000034 /* ARCameraView.swift */; };
 		A00100000000000000000034 /* WalkingRouteModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000035 /* WalkingRouteModels.swift */; };
 		A00100000000000000000035 /* WalkingRouteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000036 /* WalkingRouteService.swift */; };
+		A00100000000000000000036 /* SampleTours.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000037 /* SampleTours.swift */; };
 		A00100000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000016 /* Assets.xcassets */; };
 		A00100000000000000000017 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000018 /* APIClient.swift */; };
 		A00100000000000000000018 /* MuseumRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000019 /* MuseumRepository.swift */; };
@@ -66,6 +67,7 @@
 		A00200000000000000000034 /* ARCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARCameraView.swift; sourceTree = "<group>"; };
 		A00200000000000000000035 /* WalkingRouteModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkingRouteModels.swift; sourceTree = "<group>"; };
 		A00200000000000000000036 /* WalkingRouteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkingRouteService.swift; sourceTree = "<group>"; };
+		A00200000000000000000037 /* SampleTours.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleTours.swift; sourceTree = "<group>"; };
 		A00200000000000000000016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A00200000000000000000017 /* InvisibleMuseum.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = InvisibleMuseum.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00200000000000000000018 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -125,6 +127,7 @@
 				A00200000000000000000034 /* ARCameraView.swift */,
 				A00200000000000000000035 /* WalkingRouteModels.swift */,
 				A00200000000000000000036 /* WalkingRouteService.swift */,
+				A00200000000000000000037 /* SampleTours.swift */,
 				A00200000000000000000015 /* ExhibitEntityFactory.swift */,
 				A00200000000000000000018 /* APIClient.swift */,
 				A00200000000000000000019 /* MuseumRepository.swift */,
@@ -241,6 +244,7 @@
 				A00100000000000000000033 /* ARCameraView.swift in Sources */,
 				A00100000000000000000034 /* WalkingRouteModels.swift in Sources */,
 				A00100000000000000000035 /* WalkingRouteService.swift in Sources */,
+				A00100000000000000000036 /* SampleTours.swift in Sources */,
 				A00100000000000000000015 /* ExhibitEntityFactory.swift in Sources */,
 				A00100000000000000000017 /* APIClient.swift in Sources */,
 				A00100000000000000000018 /* MuseumRepository.swift in Sources */,

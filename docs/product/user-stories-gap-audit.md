@@ -47,6 +47,7 @@ This document captures the product behavior the app should support, checks what 
 - A primary **Map** tab exists.
 - Map tab uses MapKit with markers, user annotation, filters, selected-space card, and list navigation.
 - Map tab now draws a walking route line and shows distance/ETA for the selected space when location is available.
+- Map tab also includes a compact local walking tour preview card for the sample Downtown Loop.
 
 **Gaps:**
 - Marker selection can be more obvious visually.

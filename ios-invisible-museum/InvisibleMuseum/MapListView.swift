@@ -36,6 +36,7 @@ struct MapListView: View {
             MuseumScreen {
                 header
                 statusBanner
+                tourPreview
                 mapPanel
                 filterBar
                 if let selectedSpace {
@@ -174,6 +175,57 @@ struct MapListView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .museumGlassCard(radius: Museum.Radius.md, fill: Museum.surface.opacity(0.72))
+    }
+
+    private var tourPreview: some View {
+        Button(action: selectSampleTourPreview) {
+            MuseumCard(radius: Museum.Radius.md, fill: Museum.surfaceElevated.opacity(0.58), stroke: Museum.border, padding: 14) {
+                HStack(spacing: 12) {
+                    Image(systemName: "figure.walk.motion")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Museum.green)
+                        .frame(width: 40, height: 40)
+                        .background(Museum.green.opacity(0.14), in: Circle())
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(SampleTours.downtownLoop.title)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(Museum.text)
+                        Text(tourPreviewSubtitle)
+                            .font(Museum.bodyFont(12))
+                            .foregroundStyle(Museum.muted)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Text(tourPreviewTrailingLabel)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(tourPreviewIsReady ? Museum.blue : Museum.muted)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var sampleTourFirstSpace: MuseumSpace? {
+        guard let firstStopID = SampleTours.downtownLoop.stopIDs.first else { return nil }
+        return store.space(id: firstStopID)
+    }
+
+    private var tourPreviewIsReady: Bool {
+        sampleTourFirstSpace != nil
+    }
+
+    private var tourPreviewSubtitle: String {
+        if let firstStop = sampleTourFirstSpace {
+            return "\(SampleTours.downtownLoop.estimatedMinutes) min · \(SampleTours.downtownLoop.stopIDs.count) stops · starts at \(firstStop.name)"
+        }
+        return "\(SampleTours.downtownLoop.estimatedMinutes) min · \(SampleTours.downtownLoop.stopIDs.count) stops · waiting for sample spaces"
+    }
+
+    private var tourPreviewTrailingLabel: String {
+        tourPreviewIsReady ? "Preview" : "Not loaded"
     }
 
     private var mapPanel: some View {
@@ -320,6 +372,12 @@ struct MapListView: View {
 
     private func coordinate(for space: MuseumSpace) -> CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: space.latitude, longitude: space.longitude)
+    }
+
+    private func selectSampleTourPreview() {
+        guard let firstSpace = sampleTourFirstSpace else { return }
+        selectedSpace = firstSpace
+        updateCameraPosition()
     }
 
     private var routeTaskKey: String {
