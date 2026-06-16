@@ -1,7 +1,41 @@
 import Foundation
 
 enum BackendConfiguration {
-    static var baseURL = URL(string: "http://localhost:8080")!
+    static let apiBaseURLDefaultsKey = "InvisibleMuseum.apiBaseURL"
+    static let apiBaseURLEnvironmentKey = "InvisibleMuseum.apiBaseURL"
+    static let apiBaseURLInfoPlistKey = "InvisibleMuseum.apiBaseURL"
+    static let defaultBaseURL = URL(string: "http://localhost:8080")!
+
+    static var baseURL: URL { resolvedConfiguration().url }
+
+    static var displayBaseURL: String {
+        baseURL.absoluteString
+    }
+
+    static var sourceDescription: String {
+        resolvedConfiguration().source
+    }
+
+    private static func resolvedConfiguration() -> (url: URL, source: String) {
+        if let configuredURL = url(from: UserDefaults.standard.string(forKey: apiBaseURLDefaultsKey)) {
+            return (configuredURL, "UserDefaults")
+        }
+
+        if let configuredURL = url(from: ProcessInfo.processInfo.environment[apiBaseURLEnvironmentKey]) {
+            return (configuredURL, "Environment")
+        }
+
+        if let configuredURL = url(from: Bundle.main.object(forInfoDictionaryKey: apiBaseURLInfoPlistKey) as? String) {
+            return (configuredURL, "Info.plist")
+        }
+
+        return (defaultBaseURL, "Default")
+    }
+
+    private static func url(from rawValue: String?) -> URL? {
+        guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines), !rawValue.isEmpty else { return nil }
+        return URL(string: rawValue)
+    }
 }
 
 struct MuseumAPIClient {

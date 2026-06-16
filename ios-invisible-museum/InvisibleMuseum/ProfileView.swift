@@ -133,6 +133,8 @@ struct ProfileView: View {
                         statusPill
                     }
 
+                    apiBaseURLRow
+
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 8) {
                             infoPill("API mode", icon: "server.rack")
@@ -326,6 +328,42 @@ struct ProfileView: View {
             .padding(.vertical, 8)
             .background(statusTint.opacity(0.14), in: Capsule())
             .overlay(Capsule().stroke(statusTint.opacity(0.25), lineWidth: 1))
+    }
+
+    private var apiBaseURLRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "link")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Museum.blue)
+                .frame(width: 28, height: 28)
+                .background(Museum.blue.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("API base URL")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .tracking(1.1)
+                    .foregroundStyle(Museum.faint)
+                Text(BackendConfiguration.displayBaseURL)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Museum.text)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 0)
+
+            Text(BackendConfiguration.sourceDescription.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(Museum.muted)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Museum.background.opacity(0.55), in: Capsule())
+                .overlay(Capsule().stroke(Museum.border, lineWidth: 1))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Museum.background.opacity(0.38), in: RoundedRectangle(cornerRadius: Museum.Radius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Museum.Radius.md, style: .continuous).stroke(Museum.border, lineWidth: 1))
     }
 
     private var statusTint: Color {
