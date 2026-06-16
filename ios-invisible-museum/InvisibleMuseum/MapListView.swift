@@ -4,11 +4,19 @@ import SwiftUI
 
 struct MapListView: View {
     @Environment(MuseumStore.self) private var store
+    private let onClose: (() -> Void)?
     @State private var path: [MuseumSpace] = []
     @State private var activeKindFilter: SpaceKind?
     @State private var selectedSpace: MuseumSpace?
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var locationService = MuseumLocationService()
+    @State private var routeService = WalkingRouteService()
+    @State private var walkingRouteState: WalkingRouteState = .idle
+
+    init(initialSelectedSpace: MuseumSpace? = nil, onClose: (() -> Void)? = nil) {
+        self.onClose = onClose
+        _selectedSpace = State(initialValue: initialSelectedSpace)
+    }
 
     private var filteredSpaces: [MuseumSpace] {
         guard let activeKindFilter else { return store.spaces }
@@ -46,6 +54,20 @@ struct MapListView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: MuseumSpace.self) { MuseumDetailView(space: $0) }
+            .overlay(alignment: .topTrailing) {
+                if let onClose {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Museum.text)
+                            .frame(width: 42, height: 42)
+                            .background(.black.opacity(0.42), in: Circle())
+                            .overlay(Circle().stroke(Museum.border, lineWidth: 1))
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.top, 54)
+                }
+            }
             .onAppear {
                 if locationService.authorizationState == .unknown {
                     locationService.requestWhenInUseAuthorization()
@@ -55,6 +77,10 @@ struct MapListView: View {
             }
             .onDisappear {
                 locationService.stop()
+                routeService.cancel()
+            }
+            .onChange(of: selectedSpace?.id ?? "none") { _, _ in
+                updateCameraPosition()
             }
             .onChange(of: activeKindFilter) { _, _ in
                 if let selectedSpace, !filteredSpaces.contains(selectedSpace) {
@@ -69,10 +95,17 @@ struct MapListView: View {
                 updateCameraPosition()
             }
             .onChange(of: locationService.currentLocation?.coordinate.latitude ?? 0) { _, _ in
-                updateCameraPosition()
+                if selectedSpace == nil {
+                    updateCameraPosition()
+                }
             }
             .onChange(of: locationService.currentLocation?.coordinate.longitude ?? 0) { _, _ in
-                updateCameraPosition()
+                if selectedSpace == nil {
+                    updateCameraPosition()
+                }
+            }
+            .task(id: routeTaskKey) {
+                await updateWalkingRoute()
             }
         }
     }
@@ -153,6 +186,12 @@ struct MapListView: View {
                 }
 
                 UserAnnotation()
+
+                if case .loaded(let walkingRoute) = walkingRouteState {
+                    MapPolyline(walkingRoute.route.polyline)
+                        .stroke(Museum.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                        .mapOverlayLevel(level: .aboveRoads)
+                }
             }
             .mapStyle(.standard(elevation: .flat))
                 .frame(height: 360)
@@ -213,42 +252,133 @@ struct MapListView: View {
     }
 
     private func selectedSpaceCard(_ space: MuseumSpace) -> some View {
-        Button {
-            path.append(space)
-        } label: {
-            HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Museum.accentGradient.opacity(0.85))
-                    .frame(width: 58, height: 58)
-                    .overlay(Image(systemName: space.kind.symbol).font(.system(size: 24, weight: .semibold)).foregroundStyle(.white))
+        MuseumCard(radius: Museum.Radius.lg, fill: Museum.surfaceElevated.opacity(0.52), stroke: Color.white.opacity(0.12), padding: 14) {
+            VStack(alignment: .leading, spacing: 12) {
+                Button {
+                    path.append(space)
+                } label: {
+                    HStack(spacing: 14) {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Museum.accentGradient.opacity(0.85))
+                            .frame(width: 58, height: 58)
+                            .overlay(Image(systemName: space.kind.symbol).font(.system(size: 24, weight: .semibold)).foregroundStyle(.white))
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Overline(text: "Selected space", color: space.accent)
-                    Text(space.name)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Museum.text)
-                    Text("\(space.distanceMeters, format: .number.precision(.fractionLength(0)))m away • \(space.exhibitCount) exhibits")
-                        .font(Museum.bodyFont(12))
-                        .foregroundStyle(Museum.muted)
-                        .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Overline(text: "Selected space", color: space.accent)
+                            Text(space.name)
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(Museum.text)
+                            Text("\(space.distanceMeters, format: .number.precision(.fractionLength(0)))m away • \(space.exhibitCount) exhibits")
+                                .font(Museum.bodyFont(12))
+                                .foregroundStyle(Museum.muted)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Museum.muted)
+                    }
                 }
+                .buttonStyle(.plain)
 
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Museum.muted)
+                routeSummary
+
+                Button {
+                    openInAppleMaps(space)
+                } label: {
+                    Label("Open in Apple Maps", systemImage: "map")
+                }
+                .buttonStyle(.museum(.secondary, size: .regular))
             }
-            .padding(14)
-            .museumGlassCard(radius: Museum.Radius.lg)
         }
-        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var routeSummary: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "figure.walk")
+                .foregroundStyle(Museum.green)
+
+            switch walkingRouteState {
+            case .idle:
+                Text("Select a site to calculate walking route")
+            case .loading:
+                Text("Calculating walking route…")
+            case .loaded(let route):
+                Text("\(route.distanceText) · \(route.etaText)")
+            case .failed(let message):
+                Text(message)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(Museum.muted)
     }
 
     private func coordinate(for space: MuseumSpace) -> CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: space.latitude, longitude: space.longitude)
     }
 
+    private var routeTaskKey: String {
+        let selected = selectedSpace?.id ?? "none"
+        let coordinateKey = quantizedLocationKey(locationService.currentLocation?.coordinate)
+        return "\(selected)-\(coordinateKey)"
+    }
+
+    private func quantizedLocationKey(_ coordinate: CLLocationCoordinate2D?) -> String {
+        guard let coordinate else { return "no-location" }
+        let lat = Int((coordinate.latitude * 1000).rounded())
+        let lng = Int((coordinate.longitude * 1000).rounded())
+        return "\(lat)-\(lng)"
+    }
+
+    private func updateWalkingRoute() async {
+        guard let selectedSpace else {
+            walkingRouteState = .idle
+            routeService.cancel()
+            return
+        }
+
+        guard let userCoordinate = locationService.currentLocation?.coordinate else {
+            walkingRouteState = .failed("Location is needed to show an in-app walking route.")
+            routeService.cancel()
+            return
+        }
+
+        walkingRouteState = .loading
+        let state = await routeService.route(from: userCoordinate, to: selectedSpace)
+        guard !Task.isCancelled, selectedSpace.id == self.selectedSpace?.id else { return }
+
+        walkingRouteState = state
+        if case .loaded(let route) = state {
+            focusRoute(route.route)
+        }
+    }
+
+    private func focusRoute(_ route: MKRoute) {
+        cameraPosition = .rect(route.polyline.boundingMapRect)
+    }
+
+    private func openInAppleMaps(_ space: MuseumSpace) {
+        let item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate(for: space)))
+        item.name = space.name
+        item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking])
+    }
+
     private func updateCameraPosition() {
+        if let selectedSpace {
+            cameraPosition = .region(
+                MKCoordinateRegion(
+                    center: coordinate(for: selectedSpace),
+                    span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                )
+            )
+            return
+        }
+
         let coordinates = mapSpaces.map { coordinate(for: $0) }
         let userCoordinate = locationService.currentLocation?.coordinate
         let region = coordinateRegion(for: coordinates, userCoordinate: userCoordinate)

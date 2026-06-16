@@ -39,7 +39,7 @@ struct MuseumDetailView: View {
             .presentationBackground(.ultraThinMaterial)
         }
         .fullScreenCover(isPresented: $showingMapList) {
-            MapListView()
+            MapListView(initialSelectedSpace: space, onClose: { showingMapList = false })
         }
         .fullScreenCover(isPresented: $enterAR) { ARMuseumView(space: space) }
         .sheet(item: $readerExhibit) { ExhibitDetailView(space: space, exhibit: $0).presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(.ultraThinMaterial) }
@@ -88,7 +88,15 @@ struct MuseumDetailView: View {
     }
 
     private var summary: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let liveDistanceText: String
+        switch currentProximity {
+        case .tooFar(let distanceMeters, _), .nearby(let distanceMeters, _), .inside(let distanceMeters):
+            liveDistanceText = GeoMath.formatDistance(distanceMeters)
+        case .unknown:
+            liveDistanceText = GeoMath.formatDistance(space.distanceMeters)
+        }
+
+        return VStack(alignment: .leading, spacing: 12) {
             Text(space.summary)
                 .font(Museum.bodyFont(15))
                 .lineSpacing(4)
@@ -96,7 +104,7 @@ struct MuseumDetailView: View {
             HStack(spacing: 10) {
                 stat("\(space.exhibitCount)", "Exhibits", color: Museum.blue)
                 stat("\(space.contributorCount)", "Contributors", color: Museum.purple)
-                stat("\(Int(space.distanceMeters))m", "Away", color: Museum.green)
+                stat(liveDistanceText, "Away", color: Museum.green)
             }
         }
     }
@@ -133,7 +141,8 @@ struct MuseumDetailView: View {
     private var currentProximity: UserProximity {
         let userCoordinate = locationService.currentLocation?.coordinate
         let targetCoordinate = CLLocationCoordinate2D(latitude: space.latitude, longitude: space.longitude)
-        return GeoMath.classify(user: userCoordinate, target: targetCoordinate, radiusMeters: space.radiusMeters)
+        let activationRadius = GeoMath.arActivationRadius(for: space.radiusMeters)
+        return GeoMath.classify(user: userCoordinate, target: targetCoordinate, radiusMeters: activationRadius)
     }
 
     private func decideARFlow() {
@@ -151,7 +160,9 @@ struct MuseumDetailView: View {
                 actionPrompt = .locationNeeded
             case .tooFar(let distanceMeters, let bearingDegrees):
                 actionPrompt = .tooFar(distanceMeters: distanceMeters, bearingDegrees: bearingDegrees)
-            case .nearby, .inside:
+            case .nearby(let distanceMeters, let bearingDegrees):
+                actionPrompt = .nearby(distanceMeters: distanceMeters, bearingDegrees: bearingDegrees)
+            case .inside:
                 enterAR = true
             }
         }
@@ -262,12 +273,14 @@ struct MuseumDetailView: View {
 private enum PlaceActionPrompt: Equatable, Identifiable {
     case locationNeeded
     case locationDenied(distanceText: String?, bearingText: String?)
+    case nearby(distanceMeters: Double, bearingDegrees: Double)
     case tooFar(distanceMeters: Double, bearingDegrees: Double)
 
     var id: String {
         switch self {
         case .locationNeeded: return "locationNeeded"
         case .locationDenied(let distanceText, let bearingText): return "locationDenied-\(distanceText ?? "none")-\(bearingText ?? "none")"
+        case .nearby(let distanceMeters, let bearingDegrees): return "nearby-\(Int(distanceMeters))-\(Int(bearingDegrees))"
         case .tooFar(let distanceMeters, let bearingDegrees): return "tooFar-\(Int(distanceMeters))-\(Int(bearingDegrees))"
         }
     }
@@ -322,13 +335,34 @@ private struct DirectionsPromptView: View {
                     .buttonStyle(.museum(.secondary, size: .regular))
 
                 case .locationDenied:
+                    Button(action: viewOnMap) {
+                        Label("Open In-App Map", systemImage: "map.fill")
+                    }
+                    .buttonStyle(.museum(.primary, size: .large))
+
                     Button(action: openSettings) {
                         Label("Open Settings", systemImage: "gearshape")
+                    }
+                    .buttonStyle(.museum(.secondary, size: .regular))
+
+                    Button(action: openWalkingDirections) {
+                        Label("Open in Apple Maps", systemImage: "map")
+                    }
+                    .buttonStyle(.museum(.secondary, size: .regular))
+
+                    Button(action: tryARAnyway) {
+                        Label("Try AR Anyway", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.museum(.secondary, size: .regular))
+
+                case .nearby:
+                    Button(action: viewOnMap) {
+                        Label("Open In-App Map", systemImage: "map.fill")
                     }
                     .buttonStyle(.museum(.primary, size: .large))
 
                     Button(action: openWalkingDirections) {
-                        Label("Walking Directions", systemImage: "map")
+                        Label("Open in Apple Maps", systemImage: "map")
                     }
                     .buttonStyle(.museum(.secondary, size: .regular))
 
@@ -338,13 +372,13 @@ private struct DirectionsPromptView: View {
                     .buttonStyle(.museum(.secondary, size: .regular))
 
                 case .tooFar:
-                    Button(action: openWalkingDirections) {
-                        Label("Open Walking Directions", systemImage: "map")
+                    Button(action: viewOnMap) {
+                        Label("Open In-App Map", systemImage: "map.fill")
                     }
                     .buttonStyle(.museum(.primary, size: .large))
 
-                    Button(action: viewOnMap) {
-                        Label("View on Map", systemImage: "map.fill")
+                    Button(action: openWalkingDirections) {
+                        Label("Open in Apple Maps", systemImage: "map")
                     }
                     .buttonStyle(.museum(.secondary, size: .regular))
 
@@ -366,6 +400,8 @@ private struct DirectionsPromptView: View {
             return "Location needed"
         case .locationDenied:
             return "Location denied"
+        case .nearby:
+            return "Not close enough for AR"
         case .tooFar:
             return "Too far for AR"
         }
@@ -376,9 +412,11 @@ private struct DirectionsPromptView: View {
         case .locationNeeded:
             return "This space needs your current location so we can decide whether to open AR or directions."
         case .locationDenied:
-            return "Turn on location access to get guidance, walking directions, and AR when you're close enough."
+            return "Turn on location access to get guidance, walking directions, and AR unlocks within ~50m. You can still open the in-app map or Apple Maps."
+        case .nearby(let distanceMeters, let bearingDegrees):
+            return "AR unlocks within ~50m. You're \(GeoMath.formatDistance(distanceMeters)) away. Walk toward \(GeoMath.compassDirection(for: bearingDegrees)) or open the map first."
         case .tooFar(let distanceMeters, let bearingDegrees):
-            return "You're \(GeoMath.formatDistance(distanceMeters)) away. Walk toward \(GeoMath.compassDirection(for: bearingDegrees)) or open the map first."
+            return "AR unlocks within ~50m. You're \(GeoMath.formatDistance(distanceMeters)) away. Walk toward \(GeoMath.compassDirection(for: bearingDegrees)) or open the map first."
         }
     }
 
@@ -388,11 +426,13 @@ private struct DirectionsPromptView: View {
             return nil
         case .locationDenied(let distanceText, let bearingText):
             if let distanceText, let bearingText {
-                return "\(distanceText) away • heading \(bearingText)"
+                return "AR unlocks within ~50m • \(distanceText) away • heading \(bearingText)"
             }
-            return distanceText
+            return distanceText.map { "AR unlocks within ~50m • \($0) away" }
+        case .nearby(let distanceMeters, let bearingDegrees):
+            return "AR unlocks within ~50m • \(GeoMath.formatDistance(distanceMeters)) away • heading \(Int(bearingDegrees))°"
         case .tooFar(let distanceMeters, let bearingDegrees):
-            return "\(GeoMath.formatDistance(distanceMeters)) away • heading \(Int(bearingDegrees))°"
+            return "AR unlocks within ~50m • \(GeoMath.formatDistance(distanceMeters)) away • heading \(Int(bearingDegrees))°"
         }
     }
 

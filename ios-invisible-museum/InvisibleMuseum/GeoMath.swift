@@ -9,7 +9,12 @@ enum UserProximity: Equatable {
 }
 
 enum GeoMath {
+    static let maxARActivationRadiusMeters = 50.0
     static let nearbyMultiplier = 2.0
+
+    static func arActivationRadius(for siteRadiusMeters: Double) -> Double {
+        min(siteRadiusMeters, maxARActivationRadiusMeters)
+    }
 
     static func distanceMeters(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> Double {
         CLLocation(latitude: from.latitude, longitude: from.longitude)

@@ -19,7 +19,9 @@ enum ARCapabilityResolver {
             return .guidanceOnly(.unknown)
         case .tooFar:
             return .guidanceOnly(proximity)
-        case .nearby, .inside:
+        case .nearby:
+            return .guidanceOnly(proximity)
+        case .inside:
             if geoTrackingSupported { return .geoAR }
             if worldTrackingSupported { return .worldTrackingFallback(reason: "Geo tracking is unavailable here. Showing approximate nearby AR.") }
             return .unsupported(reason: "AR is not supported on this device.")

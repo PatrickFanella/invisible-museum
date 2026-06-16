@@ -46,10 +46,11 @@ This document captures the product behavior the app should support, checks what 
 **Current behavior:**
 - A primary **Map** tab exists.
 - Map tab uses MapKit with markers, user annotation, filters, selected-space card, and list navigation.
+- Map tab now draws a walking route line and shows distance/ETA for the selected space when location is available.
 
 **Gaps:**
 - Marker selection can be more obvious visually.
-- The map does not yet show route lines or walking time.
+- Route rendering is still only for one selected destination, not full walking tours with chained legs.
 - The map could better explain marker colors/types.
 
 **Acceptance criteria:**
@@ -66,9 +67,10 @@ This document captures the product behavior the app should support, checks what 
 
 **Current behavior:**
 - The detail screen checks location state before opening AR.
-- Unknown, denied, and too-far states show an in-app prompt first.
-- Nearby or inside states open `ARMuseumView` directly.
+- Unknown, denied, nearby, and too-far states show an in-app prompt first.
+- Only `inside` opens `ARMuseumView` directly.
 - `ARMuseumView` still handles the fallback guidance experience once opened.
+- Backend `radiusMeters` is a discovery/site radius; AR activation is capped on-device at ~50m.
 
 **Main UX gap:**
 - Even when the user is too far, they still enter the AR full-screen flow first. This makes it feel like the app “stays on the AR screen.”
@@ -76,9 +78,10 @@ This document captures the product behavior the app should support, checks what 
 **Preferred behavior:**
 - The detail screen should make a routing decision before opening AR:
   - **Too far:** show an in-app directions prompt or map guidance sheet.
-  - **Nearby:** open AR.
+  - **Nearby:** show the directions prompt until the user is inside the AR activation radius.
   - **Unknown location:** ask for location permission first.
   - **Preference override:** let user choose “Always show prompt,” “Auto-open directions when far,” or “Always ask.”
+- AR should only unlock within roughly 50m of the site, even if the backend discovery radius is larger.
 
 **Acceptance criteria:**
 - If distance is beyond the activation radius, tapping **Open AR / Directions** does not immediately show camera AR.
@@ -214,10 +217,11 @@ This should be next because it directly matches the current confusion.
 
 **Implemented so far:**
 - `MuseumDetailView` now branches on location state before presenting AR.
-- Unknown / denied / too-far states show a prompt before AR.
-- Nearby / inside states open `ARMuseumView` directly.
+- Unknown / denied / nearby / too-far states show a prompt before AR.
+- Only `inside` opens `ARMuseumView` directly.
 - Walking directions open Apple Maps.
 - Map view can be opened from the prompt.
+- `radiusMeters` is now treated as discovery radius; AR activation is capped at ~50m.
 
 **Definition of done:**
 - Tapping **Open AR / Directions** while too far shows a prompt first, not camera AR.

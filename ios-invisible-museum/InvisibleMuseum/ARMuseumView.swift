@@ -107,7 +107,8 @@ struct ARMuseumView: View {
     private var currentProximity: UserProximity {
         let userCoordinate = locationService.currentLocation?.coordinate
         let targetCoordinate = CLLocationCoordinate2D(latitude: space.latitude, longitude: space.longitude)
-        return GeoMath.classify(user: userCoordinate, target: targetCoordinate, radiusMeters: space.radiusMeters)
+        let activationRadius = GeoMath.arActivationRadius(for: space.radiusMeters)
+        return GeoMath.classify(user: userCoordinate, target: targetCoordinate, radiusMeters: activationRadius)
     }
 
     private var currentHeadingDegrees: Double? {
@@ -337,17 +338,17 @@ private struct GuidanceCard: View {
         switch proximity {
         case .tooFar(let distanceMeters, let bearingDegrees):
             let direction = GeoMath.compassDirection(for: bearingDegrees)
-            return "Too far for AR. Use this map or walk \(GeoMath.formatDistance(distanceMeters)) toward \(direction) to reach \(space.name)."
+            return "AR unlocks within ~50m. Use this map or walk \(GeoMath.formatDistance(distanceMeters)) toward \(direction) to reach \(space.name)."
         case .unknown:
             if authorizationState == .denied {
                 return lastErrorMessage ?? "Location access is off, so AR guidance is unavailable."
             }
-            return lastErrorMessage ?? "Allow location access to unlock nearby geo AR and distance guidance."
+            return lastErrorMessage ?? "Allow location access to unlock AR within ~50m and distance guidance."
         case .nearby(_, let bearingDegrees):
             let direction = GeoMath.compassDirection(for: bearingDegrees)
-            return "You're close. Open AR for an approximate in-world marker facing \(direction)."
+            return "You're close, but AR unlocks within ~50m. Walk a bit closer or open directions facing \(direction)."
         case .inside:
-            return "You're inside the activation radius for this space."
+            return "You're inside the AR activation radius for this space."
         }
     }
 
