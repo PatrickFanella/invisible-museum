@@ -5,7 +5,7 @@ enum BackendConfiguration {
     static let apiBaseURLEnvironmentKey = "InvisibleMuseum.apiBaseURL"
     static let apiBaseURLInfoPlistKey = "InvisibleMuseum.apiBaseURL"
     static let adminBearerTokenDefaultsKey = "InvisibleMuseum.adminBearerToken"
-    static let defaultBaseURL = URL(string: "http://localhost:8080")!
+    static let defaultBaseURL = URL(string: "https://museum-api.subcult.tv")!
 
     static var baseURL: URL { resolvedConfiguration().url }
 

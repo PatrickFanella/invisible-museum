@@ -42,10 +42,10 @@ make nuc-smoke
 The iOS app defaults to:
 
 ```txt
-http://localhost:8080
+https://museum-api.subcult.tv
 ```
 
-That works for the iOS Simulator when the backend is running locally.
+That works from the simulator or a physical device anywhere with internet access. Use the API URL override if you want to point at a local backend.
 
 ## Useful commands
 
@@ -110,14 +110,14 @@ If the backend is unavailable, the app falls back to bundled sample data and sho
 
 ## API URL configuration
 
-The default API base URL is `http://localhost:8080`.
+The default API base URL is `https://museum-api.subcult.tv`.
 
 Override order in the app:
 
 1. `UserDefaults["InvisibleMuseum.apiBaseURL"]`
 2. Process environment `InvisibleMuseum.apiBaseURL`
 3. Info.plist key `InvisibleMuseum.apiBaseURL`
-4. Default `http://localhost:8080`
+4. Default `https://museum-api.subcult.tv`
 
 The local iOS admin token is stored in `UserDefaults["InvisibleMuseum.adminBearerToken"]`.
 
@@ -125,7 +125,7 @@ For NUC/Almaz deployment, the intended shape is:
 
 ```txt
 iOS app
-  -> https://museum-api.example.com
+  -> https://museum-api.subcult.tv
   -> Cloudflare / Caddy on Almaz
   -> Go API + PostgreSQL on NUC
 ```
