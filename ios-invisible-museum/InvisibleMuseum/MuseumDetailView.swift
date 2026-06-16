@@ -95,7 +95,7 @@ struct MuseumDetailView: View {
     private var actions: some View {
         VStack(spacing: 10) {
             Button { enterAR = true } label: {
-                Label("Begin AR Experience", systemImage: "sparkles")
+                Label("Open AR / Directions", systemImage: "sparkles")
             }
             .buttonStyle(.museum(.primary, size: .large))
 

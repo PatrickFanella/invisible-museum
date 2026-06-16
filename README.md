@@ -108,6 +108,13 @@ The app uses a SwiftUI design system built around semantic tokens and reusable p
 
 If the backend is unavailable, the app falls back to bundled sample data and shows the fallback state in Explore/Profile.
 
+### AR behavior
+
+- Real geo-AR requires a physical iPhone or iPad with ARKit support.
+- The Simulator still builds and shows the guidance/fallback UI, but it does not validate real camera tracking.
+- When a selected space is too far away, the app shows distance/bearing guidance and opens Apple Maps walking directions.
+- When the user is nearby, the app attempts geo-AR first and falls back to approximate world-tracking AR if geo tracking is unavailable.
+
 ## API URL configuration
 
 The default API base URL is `https://museum-api.subcult.tv`.
