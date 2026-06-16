@@ -1,0 +1,11 @@
+{
+  "apps": [
+    {
+      "name": "Invisible Museum",
+      "path": "ios-invisible-museum",
+      "framework": "swift"
+    }
+  ],
+  "$schema": "https://rork.com/schema/rork.json"
+}
+

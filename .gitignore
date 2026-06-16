@@ -1,0 +1,65 @@
+# macOS / editor
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+*.local
+
+# Rork / Expo artifacts
+.rork/
+.expo/
+
+# Node / web mockup
+node_modules/
+**/node_modules/
+dist/
+build/
+coverage/
+.next/
+.turbo/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Xcode / Swift
+DerivedData/
+**/DerivedData/
+ios-invisible-museum/build/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+**/.build/
+.swiftpm/
+**/.swiftpm/
+
+# CocoaPods / Carthage if added later
+Pods/
+Carthage/Build/
+
+# Go
+backend/bin/
+backend/tmp/
+backend/coverage.out
+backend/*.test
+
+# Docker / database local data
+postgres_data/
+*.dump
+*.sql.gz
+
+# Logs
+*.log
