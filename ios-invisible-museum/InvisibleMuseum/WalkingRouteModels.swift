@@ -41,13 +41,28 @@ enum WalkingRouteState: Equatable {
     case failed(String)
 }
 
-struct TourStop: Identifiable, Hashable, Sendable {
+struct TourSpace: Identifiable, Codable, Hashable, Sendable {
     let id: String
-    let spaceID: String
-    let order: Int
     let title: String
     let latitude: Double
     let longitude: Double
+    let tagline: String
+}
+
+struct TourStop: Identifiable, Codable, Hashable, Sendable {
+    let id: String
+    let order: Int
+    let spaceID: String
+    let space: TourSpace
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case order
+        case spaceID = "spaceId"
+        case space
+    }
+
+    var title: String { space.title }
 }
 
 struct TourLeg: Identifiable, Hashable, Sendable {
@@ -57,10 +72,25 @@ struct TourLeg: Identifiable, Hashable, Sendable {
     let order: Int
 }
 
-struct WalkingTour: Identifiable, Hashable, Sendable {
+struct WalkingTour: Identifiable, Codable, Hashable, Sendable {
     let id: String
     let title: String
     let summary: String
     let estimatedMinutes: Int
-    let stopIDs: [String]
+    let published: Bool
+    let stops: [TourStop]
+
+    var stopIDs: [String] { stops.map(\.spaceID) }
+}
+
+struct WalkingTourProgress: Codable, Equatable, Sendable {
+    let tourID: String
+    var currentStopID: String?
+    var visitedStopIDs: Set<String>
+
+    init(tourID: String, currentStopID: String? = nil, visitedStopIDs: Set<String> = []) {
+        self.tourID = tourID
+        self.currentStopID = currentStopID
+        self.visitedStopIDs = visitedStopIDs
+    }
 }

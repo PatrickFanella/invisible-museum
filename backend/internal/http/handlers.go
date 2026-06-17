@@ -21,6 +21,8 @@ type Repository interface {
 	NearbySpaces(ctx context.Context, lat, lng float64, radiusM int) ([]models.Space, error)
 	GetSpace(ctx context.Context, id string) (*models.Space, error)
 	GetExhibit(ctx context.Context, id string) (*models.Exhibit, error)
+	ListTours(ctx context.Context) ([]models.Tour, error)
+	GetTour(ctx context.Context, id string) (*models.Tour, error)
 	CreateContribution(ctx context.Context, req models.ContributionRequest) (models.ContributionResponse, error)
 	ListContributions(ctx context.Context, status string) ([]models.Contribution, error)
 	UpdateContributionStatus(ctx context.Context, id string, status string) (*models.Contribution, error)
@@ -97,6 +99,32 @@ func (h *Handlers) GetExhibit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, exhibit)
+}
+
+// ListTours returns published walking tours.
+func (h *Handlers) ListTours(w http.ResponseWriter, r *http.Request) {
+	tours, err := h.repo.ListTours(r.Context())
+	if err != nil {
+		writeUnexpectedError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, tours)
+}
+
+// GetTour returns a single walking tour.
+func (h *Handlers) GetTour(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "tour_id"))
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "tour_id is required")
+		return
+	}
+
+	tour, err := h.repo.GetTour(r.Context(), id)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, tour)
 }
 
 // CreateContribution stores a contribution request.

@@ -142,6 +142,64 @@ func (r *Repository) GetExhibit(ctx context.Context, id string) (*models.Exhibit
 	return &exhibit, nil
 }
 
+// ListTours returns all published tours with ordered stops.
+func (r *Repository) ListTours(ctx context.Context) ([]models.Tour, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, title, summary, estimated_minutes, published
+		FROM tours
+		WHERE published = true
+		ORDER BY title
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list tours: %w", err)
+	}
+	defer rows.Close()
+
+	tours := make([]models.Tour, 0)
+	for rows.Next() {
+		tour, err := scanTour(rows)
+		if err != nil {
+			return nil, err
+		}
+		tours = append(tours, tour)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list tours rows: %w", err)
+	}
+	for i := range tours {
+		stops, err := r.listTourStops(ctx, tours[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		tours[i].Stops = stops
+	}
+	return tours, nil
+}
+
+// GetTour returns a single published tour with ordered stops.
+func (r *Repository) GetTour(ctx context.Context, id string) (*models.Tour, error) {
+	row := r.db.QueryRow(ctx, `
+		SELECT id, title, summary, estimated_minutes, published
+		FROM tours
+		WHERE id = $1 AND published = true
+	`, id)
+
+	tour, err := scanTour(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	stops, err := r.listTourStops(ctx, tour.ID)
+	if err != nil {
+		return nil, err
+	}
+	tour.Stops = stops
+	return &tour, nil
+}
+
 // ListExhibits returns all exhibits for a space.
 func (r *Repository) ListExhibits(ctx context.Context, spaceID string) ([]models.Exhibit, error) {
 	rows, err := r.db.Query(ctx, `
@@ -258,6 +316,33 @@ func (r *Repository) attachExhibits(ctx context.Context, spaces []models.Space) 
 	return nil
 }
 
+func (r *Repository) listTourStops(ctx context.Context, tourID string) ([]models.TourStop, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT ts.id, ts.stop_order, ts.space_id, s.id, s.name, s.latitude, s.longitude, s.tagline
+		FROM tour_stops ts
+		JOIN spaces s ON s.id = ts.space_id
+		WHERE ts.tour_id = $1
+		ORDER BY ts.stop_order ASC
+	`, tourID)
+	if err != nil {
+		return nil, fmt.Errorf("list tour stops: %w", err)
+	}
+	defer rows.Close()
+
+	stops := make([]models.TourStop, 0)
+	for rows.Next() {
+		stop, err := scanTourStop(rows)
+		if err != nil {
+			return nil, err
+		}
+		stops = append(stops, stop)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list tour stops rows: %w", err)
+	}
+	return stops, nil
+}
+
 func scanSpaces(rows pgx.Rows) ([]models.Space, error) {
 	spaces := make([]models.Space, 0)
 	for rows.Next() {
@@ -326,6 +411,23 @@ func scanExhibit(row interface{ Scan(dest ...any) error }) (models.Exhibit, erro
 		exhibit.DurationSeconds = &value
 	}
 	return exhibit, nil
+}
+
+func scanTour(row interface{ Scan(dest ...any) error }) (models.Tour, error) {
+	var tour models.Tour
+	if err := row.Scan(&tour.ID, &tour.Title, &tour.Summary, &tour.EstimatedMinutes, &tour.Published); err != nil {
+		return models.Tour{}, fmt.Errorf("scan tour: %w", err)
+	}
+	tour.Stops = []models.TourStop{}
+	return tour, nil
+}
+
+func scanTourStop(row interface{ Scan(dest ...any) error }) (models.TourStop, error) {
+	var stop models.TourStop
+	if err := row.Scan(&stop.ID, &stop.Order, &stop.SpaceID, &stop.Space.ID, &stop.Space.Title, &stop.Space.Latitude, &stop.Space.Longitude, &stop.Space.Tagline); err != nil {
+		return models.TourStop{}, fmt.Errorf("scan tour stop: %w", err)
+	}
+	return stop, nil
 }
 
 func scanContribution(row interface{ Scan(dest ...any) error }) (models.Contribution, error) {

@@ -19,6 +19,8 @@ type fakeRepository struct {
 	nearbySpacesFn           func(lat, lng float64, radiusM int) ([]models.Space, error)
 	getSpaceFn               func(id string) (*models.Space, error)
 	getExhibitFn             func(id string) (*models.Exhibit, error)
+	listToursFn              func() ([]models.Tour, error)
+	getTourFn                func(id string) (*models.Tour, error)
 	createContributionFn     func(req models.ContributionRequest) (models.ContributionResponse, error)
 	listContributionsFn      func(status string) ([]models.Contribution, error)
 	updateContributionFn     func(id, status string) (*models.Contribution, error)
@@ -27,6 +29,7 @@ type fakeRepository struct {
 	nearbyLat                float64
 	nearbyLng                float64
 	nearbyRadiusM            int
+	getTourID                string
 	createContributionReq    models.ContributionRequest
 	listContributionsStatus  string
 	updateContributionID     string
@@ -50,6 +53,21 @@ func (f *fakeRepository) GetSpace(_ context.Context, id string) (*models.Space, 
 
 func (f *fakeRepository) GetExhibit(_ context.Context, id string) (*models.Exhibit, error) {
 	return f.getExhibitFn(id)
+}
+
+func (f *fakeRepository) ListTours(_ context.Context) ([]models.Tour, error) {
+	if f.listToursFn != nil {
+		return f.listToursFn()
+	}
+	return nil, nil
+}
+
+func (f *fakeRepository) GetTour(_ context.Context, id string) (*models.Tour, error) {
+	f.getTourID = id
+	if f.getTourFn != nil {
+		return f.getTourFn(id)
+	}
+	return nil, nil
 }
 
 func (f *fakeRepository) CreateContribution(_ context.Context, req models.ContributionRequest) (models.ContributionResponse, error) {
@@ -463,5 +481,137 @@ func TestMissingRecordsReturn404(t *testing.T) {
 				t.Fatalf("body = %s, want not found", got)
 			}
 		})
+	}
+}
+
+func TestTourRoutesReturnJSONShape(t *testing.T) {
+	listRepo := &fakeRepository{
+		listToursFn: func() ([]models.Tour, error) {
+			return []models.Tour{{
+				ID:               "tour-downtown-memory-loop",
+				Title:            "Downtown Memory Loop",
+				Summary:          "A short walk linking downtown landmarks.",
+				EstimatedMinutes: 45,
+				Published:        true,
+				Stops: []models.TourStop{{
+					ID:      "tour-stop-1",
+					Order:   1,
+					SpaceID: "sp-main-street-station",
+					Space: models.TourSpace{
+						ID:        "sp-main-street-station",
+						Title:     "Main Street Station",
+						Latitude:  41.7959,
+						Longitude: -88.0092,
+						Tagline:   "Downtown rail corridor",
+					},
+				}},
+			}}, nil
+		},
+	}
+
+	getRepo := &fakeRepository{
+		getTourFn: func(id string) (*models.Tour, error) {
+			if id != "tour-downtown-memory-loop" {
+				t.Fatalf("repo id = %q, want tour-downtown-memory-loop", id)
+			}
+			return &models.Tour{
+				ID:               "tour-downtown-memory-loop",
+				Title:            "Downtown Memory Loop",
+				Summary:          "A short walk linking downtown landmarks.",
+				EstimatedMinutes: 45,
+				Published:        true,
+				Stops: []models.TourStop{{
+					ID:      "tour-stop-1",
+					Order:   1,
+					SpaceID: "sp-main-street-station",
+					Space: models.TourSpace{
+						ID:        "sp-main-street-station",
+						Title:     "Main Street Station",
+						Latitude:  41.7959,
+						Longitude: -88.0092,
+						Tagline:   "Downtown rail corridor",
+					},
+				}},
+			}, nil
+		},
+	}
+
+	router := NewRouter(NewHandlers(listRepo), "")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tours", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	var tours []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &tours); err != nil {
+		t.Fatalf("unmarshal list response: %v", err)
+	}
+	if len(tours) != 1 {
+		t.Fatalf("len(tours) = %d, want 1", len(tours))
+	}
+	if got := tours[0]["title"]; got != "Downtown Memory Loop" {
+		t.Fatalf("title = %v, want Downtown Memory Loop", got)
+	}
+	if got := tours[0]["published"]; got != true {
+		t.Fatalf("published = %v, want true", got)
+	}
+	stops, ok := tours[0]["stops"].([]any)
+	if !ok || len(stops) != 1 {
+		t.Fatalf("stops = %#v, want 1 stop", tours[0]["stops"])
+	}
+	stop := stops[0].(map[string]any)
+	if got := stop["order"]; got != float64(1) {
+		t.Fatalf("stop order = %v, want 1", got)
+	}
+	space := stop["space"].(map[string]any)
+	if got := space["id"]; got != "sp-main-street-station" {
+		t.Fatalf("space id = %v, want sp-main-street-station", got)
+	}
+	if got := space["latitude"]; got != 41.7959 {
+		t.Fatalf("space latitude = %v, want 41.7959", got)
+	}
+
+	router = NewRouter(NewHandlers(getRepo), "")
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/tours/tour-downtown-memory-loop", nil)
+	rec = httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	var tour map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &tour); err != nil {
+		t.Fatalf("unmarshal get response: %v", err)
+	}
+	if got := tour["id"]; got != "tour-downtown-memory-loop" {
+		t.Fatalf("id = %v, want tour-downtown-memory-loop", got)
+	}
+	if got := tour["title"]; got != "Downtown Memory Loop" {
+		t.Fatalf("title = %v, want Downtown Memory Loop", got)
+	}
+	stops, ok = tour["stops"].([]any)
+	if !ok || len(stops) != 1 {
+		t.Fatalf("get stops = %#v, want 1 stop", tour["stops"])
+	}
+
+	router = NewRouter(NewHandlers(&fakeRepository{
+		getTourFn: func(id string) (*models.Tour, error) {
+			return nil, repository.ErrNotFound
+		},
+	}), "")
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/tours/missing-tour", nil)
+	rec = httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("not found status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	if got := strings.TrimSpace(rec.Body.String()); !strings.Contains(got, "not found") {
+		t.Fatalf("not found body = %s, want not found", got)
 	}
 }

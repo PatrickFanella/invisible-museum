@@ -15,6 +15,8 @@ func NewRouter(h *Handlers, adminBearerToken string) http.Handler {
 		r.Get("/spaces/nearby", h.NearbySpaces)
 		r.Get("/spaces/{space_id}", h.GetSpace)
 		r.Get("/exhibits/{exhibit_id}", h.GetExhibit)
+		r.Get("/tours", h.ListTours)
+		r.Get("/tours/{tour_id}", h.GetTour)
 		r.Post("/contributions", h.CreateContribution)
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(adminAuthMiddleware(adminBearerToken))

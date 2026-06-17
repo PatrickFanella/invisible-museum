@@ -18,7 +18,9 @@ final class MuseumStore {
     private let repository: any MuseumRepository
     private let persistence: MuseumLocalPersistence
     private(set) var spaces: [MuseumSpace]
+    private(set) var tours: [WalkingTour]
     private(set) var nearbySpacesState: NearbySpacesState = .loading
+    private(set) var toursState: ToursState = .loading
     private(set) var moderationQueue: [ContributionModerationItem] = []
     private(set) var moderationQueueState: ModerationQueueState = .loading
     private(set) var moderationMessage: String?
@@ -29,6 +31,12 @@ final class MuseumStore {
 
 
     enum NearbySpacesState: Equatable {
+        case loading
+        case loadedFromBackend
+        case sampleFallback(reason: String)
+    }
+
+    enum ToursState: Equatable {
         case loading
         case loadedFromBackend
         case sampleFallback(reason: String)
@@ -48,6 +56,7 @@ final class MuseumStore {
         self.repository = repository
         self.persistence = persistence
         spaces = SampleData.spaces
+        tours = [SampleTours.downtownLoop]
         let savedIDs = persistence.loadSavedExhibitIDs()
         let overrides = persistence.loadDownloadedSpaceOverrides()
         let contributionTotal = persistence.loadContributionCount()
@@ -71,6 +80,11 @@ final class MuseumStore {
 
     func space(id: String) -> MuseumSpace? {
         spaces.first { $0.id == id }
+    }
+
+
+    func tour(id: String) -> WalkingTour? {
+        tours.first { $0.id == id }
     }
 
 
@@ -129,6 +143,19 @@ final class MuseumStore {
             )
             persistence.saveDownloadedSpaceIDs(downloadedSpaceIDs)
             nearbySpacesState = .sampleFallback(reason: fallbackReason(for: error))
+        }
+    }
+
+    func loadTours() async {
+        toursState = .loading
+
+        do {
+            let fetchedTours = try await repository.fetchTours()
+            tours = fetchedTours.isEmpty ? [SampleTours.downtownLoop] : fetchedTours
+            toursState = fetchedTours.isEmpty ? .sampleFallback(reason: "Backend returned no tours") : .loadedFromBackend
+        } catch {
+            tours = [SampleTours.downtownLoop]
+            toursState = .sampleFallback(reason: fallbackReason(for: error))
         }
     }
 

@@ -24,7 +24,10 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             MuseumBottomBar(selection: $tab)
         }
-        .task { await store.loadNearbySpaces() }
+        .task {
+            await store.loadNearbySpaces()
+            await store.loadTours()
+        }
         .environment(store)
         .preferredColorScheme(.dark)
     }

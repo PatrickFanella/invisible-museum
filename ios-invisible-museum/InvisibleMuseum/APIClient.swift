@@ -79,6 +79,24 @@ struct MuseumAPIClient {
         return try decoder.decode([MuseumSpaceDTO].self, from: data)
     }
 
+    func fetchTours() async throws -> [WalkingTour] {
+        let url = baseURL.appendingPathComponent("api/v1/tours")
+        let (data, response) = try await session.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        guard (200...299).contains(httpResponse.statusCode) else { throw APIError.unexpectedStatusCode(httpResponse.statusCode) }
+
+        return try decoder.decode([TourDTO].self, from: data).map { $0.toModel() }
+    }
+
+    func fetchTour(id: String) async throws -> WalkingTour {
+        let url = baseURL.appendingPathComponent("api/v1/tours").appendingPathComponent(id)
+        let (data, response) = try await session.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        guard (200...299).contains(httpResponse.statusCode) else { throw APIError.unexpectedStatusCode(httpResponse.statusCode) }
+
+        return try decoder.decode(TourDTO.self, from: data).toModel()
+    }
+
     func submitContribution(spaceID: String, suggestedTitle: String, kind: ExhibitKind, body: String, contributorName: String) async throws -> ContributionSubmissionDTO {
         let url = baseURL.appendingPathComponent("api/v1/contributions")
         var request = URLRequest(url: url)
@@ -215,6 +233,56 @@ struct MuseumSpaceDTO: Decodable {
             accentHue: accentHue,
             isDownloaded: isDownloaded,
             exhibits: exhibits.map { $0.toModel() }
+        )
+    }
+}
+
+struct TourSpaceDTO: Decodable {
+    let id: String
+    let title: String
+    let latitude: Double
+    let longitude: Double
+    let tagline: String
+
+    func toModel() -> TourSpace {
+        TourSpace(id: id, title: title, latitude: latitude, longitude: longitude, tagline: tagline)
+    }
+}
+
+struct TourStopDTO: Decodable {
+    let id: String
+    let order: Int
+    let spaceID: String
+    let space: TourSpaceDTO
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case order
+        case spaceID = "spaceId"
+        case space
+    }
+
+    func toModel() -> TourStop {
+        TourStop(id: id, order: order, spaceID: spaceID, space: space.toModel())
+    }
+}
+
+struct TourDTO: Decodable {
+    let id: String
+    let title: String
+    let summary: String
+    let estimatedMinutes: Int
+    let published: Bool
+    let stops: [TourStopDTO]
+
+    func toModel() -> WalkingTour {
+        WalkingTour(
+            id: id,
+            title: title,
+            summary: summary,
+            estimatedMinutes: estimatedMinutes,
+            published: published,
+            stops: stops.map { $0.toModel() }
         )
     }
 }

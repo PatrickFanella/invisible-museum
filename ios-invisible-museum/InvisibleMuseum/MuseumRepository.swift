@@ -3,6 +3,8 @@ import Foundation
 protocol MuseumRepository {
     var requiresAdminBearerToken: Bool { get }
     func fetchNearbySpaces(latitude: Double, longitude: Double, radiusMeters: Double) async throws -> [MuseumSpace]
+    func fetchTours() async throws -> [WalkingTour]
+    func fetchTour(id: String) async throws -> WalkingTour
     func submitContribution(spaceID: String, suggestedTitle: String, kind: ExhibitKind, body: String, contributorName: String) async throws -> ContributionSubmissionDTO
     func fetchModerationQueue() async throws -> [ContributionModerationItem]
     func updateContributionStatus(id: String, status: ContributionModerationStatus) async throws -> ContributionModerationItem
@@ -15,6 +17,14 @@ struct BackendMuseumRepository: MuseumRepository {
     func fetchNearbySpaces(latitude: Double, longitude: Double, radiusMeters: Double) async throws -> [MuseumSpace] {
         let spaces = try await client.fetchNearbySpaces(latitude: latitude, longitude: longitude, radiusMeters: radiusMeters)
         return spaces.map { $0.toModel() }
+    }
+
+    func fetchTours() async throws -> [WalkingTour] {
+        try await client.fetchTours()
+    }
+
+    func fetchTour(id: String) async throws -> WalkingTour {
+        try await client.fetchTour(id: id)
     }
 
     func submitContribution(spaceID: String, suggestedTitle: String, kind: ExhibitKind, body: String, contributorName: String) async throws -> ContributionSubmissionDTO {
@@ -43,6 +53,17 @@ struct SampleMuseumRepository: MuseumRepository {
 
     func fetchNearbySpaces(latitude: Double, longitude: Double, radiusMeters: Double) async throws -> [MuseumSpace] {
         SampleData.spaces
+    }
+
+    func fetchTours() async throws -> [WalkingTour] {
+        [SampleTours.downtownLoop]
+    }
+
+    func fetchTour(id: String) async throws -> WalkingTour {
+        guard id == SampleTours.downtownLoop.id else {
+            throw MuseumAPIClient.APIError.unexpectedStatusCode(404)
+        }
+        return SampleTours.downtownLoop
     }
 
     func submitContribution(spaceID: String, suggestedTitle: String, kind: ExhibitKind, body: String, contributorName: String) async throws -> ContributionSubmissionDTO {

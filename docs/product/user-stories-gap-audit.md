@@ -47,12 +47,12 @@ This document captures the product behavior the app should support, checks what 
 - A primary **Map** tab exists.
 - Map tab uses MapKit with markers, user annotation, filters, selected-space card, and list navigation.
 - Map tab now draws a walking route line and shows distance/ETA for the selected space when location is available.
-- Map tab also includes a compact local walking tour preview card for the sample Downtown Loop.
+- Map tab now has a local walking mode with a pinned route card, Start Walking / End actions, and a basic Downtown Memory Loop tour flow with ordered stops and visited state.
 
 **Gaps:**
 - Marker selection can be more obvious visually.
-- Route rendering is still only for one selected destination, not full walking tours with chained legs.
 - The map could better explain marker colors/types.
+- Tour flow is still prototype-simple: no offline media, no chained inter-stop route logic beyond the active stop, and no saved tour history beyond local progress.
 
 **Acceptance criteria:**
 - Map tab is visible from bottom nav.
@@ -234,7 +234,8 @@ This should be next because it directly matches the current confusion.
 
 **Build:**
 - Show walking time/distance on selected marker card.
-- Add “Directions” button directly on selected-space card.
+- Add “Start walking” / “End” active mode on the map card.
+- Add a local Downtown Memory Loop tour flow with step numbers and visited state.
 - Add marker legend.
 
 ### Batch C: Nearby AR quality pass

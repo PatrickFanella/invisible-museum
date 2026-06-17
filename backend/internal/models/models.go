@@ -82,3 +82,30 @@ type Contribution struct {
 	CreatedAt       time.Time          `json:"created_at"`
 	UpdatedAt       time.Time          `json:"updated_at"`
 }
+
+// Tour represents a walking tour response.
+type Tour struct {
+	ID               string     `json:"id"`
+	Title            string     `json:"title"`
+	Summary          string     `json:"summary"`
+	EstimatedMinutes int        `json:"estimatedMinutes"`
+	Published        bool       `json:"published"`
+	Stops            []TourStop `json:"stops"`
+}
+
+// TourStop represents a stop on a walking tour response.
+type TourStop struct {
+	ID      string    `json:"id"`
+	Order   int       `json:"order"`
+	SpaceID string    `json:"spaceId"`
+	Space   TourSpace `json:"space"`
+}
+
+// TourSpace is the embedded space summary used for tour stops.
+type TourSpace struct {
+	ID        string  `json:"id"`
+	Title     string  `json:"title"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Tagline   string  `json:"tagline"`
+}

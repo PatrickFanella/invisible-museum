@@ -2,6 +2,8 @@ import Foundation
 
 struct MuseumLocalPersistence {
     private let defaults: UserDefaults
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -12,6 +14,7 @@ struct MuseumLocalPersistence {
         static let downloadedSpaceIDs = "MuseumStore.downloadedSpaceIDs"
         static let downloadedSpaceOverrides = "MuseumStore.downloadedSpaceOverrides"
         static let contributionCount = "MuseumStore.contributionCount"
+        static let walkingTourProgressPrefix = "MuseumStore.walkingTourProgress."
     }
 
     func loadSavedExhibitIDs() -> Set<String> {
@@ -44,6 +47,23 @@ struct MuseumLocalPersistence {
 
     func saveContributionCount(_ count: Int) {
         defaults.set(count, forKey: Key.contributionCount)
+    }
+
+    func loadWalkingTourProgress(tourID: String) -> WalkingTourProgress? {
+        guard let data = defaults.data(forKey: Key.walkingTourProgressPrefix + tourID) else { return nil }
+        return try? decoder.decode(WalkingTourProgress.self, from: data)
+    }
+
+    func saveWalkingTourProgress(_ progress: WalkingTourProgress?) {
+        let key = Key.walkingTourProgressPrefix + (progress?.tourID ?? "unknown")
+        guard let progress else {
+            defaults.removeObject(forKey: key)
+            return
+        }
+
+        if let data = try? encoder.encode(progress) {
+            defaults.set(data, forKey: key)
+        }
     }
 
     private func loadStringSet(forKey key: String) -> Set<String>? {
