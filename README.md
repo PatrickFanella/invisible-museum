@@ -144,3 +144,7 @@ iOS app
 - Use HTTPS for any non-local admin access.
 - Rotate the admin token by updating the env var and restarting the backend.
 - App icon is currently a generated placeholder.
+
+## License
+
+Licensed under `GPL-3.0-or-later`. See [LICENSE](LICENSE).
